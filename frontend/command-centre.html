@@ -1,0 +1,216 @@
+cat > /var/www/apexquant-v6/frontend/command-centre.html <<'EOF'
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ApexQuant Command Centre</title>
+<style>
+:root{
+  --bg:#070011;--panel:#12001f;--panel2:#1b0730;--line:#43205e;
+  --cyan:#00f5ff;--pink:#ff2bd6;--green:#00ff88;--red:#ff3864;
+  --yellow:#ffe84d;--text:#f6eaff;--muted:#aa91c5;
+}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at 50% 0,#43006b,#090010 55%,#020005);color:var(--text);font-family:Inter,Arial,sans-serif}
+.app{display:grid;grid-template-columns:230px 1fr;min-height:100vh}
+.side{background:#090012;border-right:1px solid var(--line);padding:22px;position:sticky;top:0;height:100vh}
+.logo{font-size:27px;font-weight:900;color:var(--cyan);margin-bottom:28px}
+.nav button{width:100%;padding:14px;margin:6px 0;border-radius:14px;border:1px solid transparent;background:transparent;color:#cbb8df;text-align:left;font-weight:800}
+.nav button.active,.nav button:hover{border-color:#ff2bd680;background:#ff2bd620;color:#fff}
+.sideCard{position:absolute;bottom:22px;left:22px;right:22px;border:1px solid var(--line);border-radius:18px;padding:18px;background:#130022}
+.main{padding:22px;overflow:hidden}
+.top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:18px}
+.search{background:#25083a;border:1px solid #6b2290;color:white;border-radius:14px;padding:14px;width:min(520px,100%)}
+.status{display:flex;gap:12px;align-items:center}
+.pill{padding:7px 11px;border-radius:999px;background:#27133c;border:1px solid var(--line);font-size:12px}
+.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}
+.card{background:linear-gradient(145deg,#180329,#08000e);border:1px solid #41135c;border-radius:18px;padding:16px;box-shadow:0 0 30px #8d00ff1e;min-height:105px}
+.c2{grid-column:span 2}.c3{grid-column:span 3}.c4{grid-column:span 4}.c5{grid-column:span 5}.c6{grid-column:span 6}.c7{grid-column:span 7}.c8{grid-column:span 8}.c12{grid-column:span 12}
+h3{margin:0 0 12px;font-size:13px;color:#e9c6ff;text-transform:uppercase;letter-spacing:1px}
+.big{font-size:34px;font-weight:900;margin:8px 0}
+.green{color:var(--green)}.red{color:var(--red)}.cyan{color:var(--cyan)}.pink{color:var(--pink)}.yellow{color:var(--yellow)}
+canvas{width:100%;height:180px}
+.kpiSpark{height:38px}
+.bar{height:11px;border-radius:20px;background:#2b1640;overflow:hidden}.bar div{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green),var(--pink))}
+table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:10px;border-bottom:1px solid #35104e;text-align:left;vertical-align:top}th{color:var(--muted);font-size:11px;text-transform:uppercase}
+.tradeCard{border:1px solid #40115f;border-radius:16px;padding:14px;background:#0d0218;margin-bottom:12px}
+.tradeHead{display:flex;justify-content:space-between;gap:10px}
+.sell{background:#31000d;border:1px solid var(--red);color:white;border-radius:10px;padding:8px 12px;font-weight:900}
+.sellAll{background:#400012;border:1px solid var(--red);color:white;border-radius:12px;padding:12px 15px;font-weight:900}
+.expand{background:#1c0530;border:1px solid var(--pink);color:white;border-radius:12px;padding:12px 15px;font-weight:900}
+.tab{display:none}.tab.active{display:block}
+.envRow{display:grid;grid-template-columns:110px 1fr 50px;gap:10px;margin:11px 0;align-items:center;font-size:12px}
+.meter{height:8px;border-radius:10px;background:#2a143f;overflow:hidden}.meter div{height:100%;background:linear-gradient(90deg,var(--pink),var(--cyan),var(--green))}
+.brain{border-left:3px solid var(--cyan);background:#140321;padding:10px;margin:8px 0;border-radius:8px;font-size:12px}
+.modal{display:none;position:fixed;inset:0;background:#000c;z-index:50;padding:20px}.modalBox{height:94vh;overflow:auto;background:#08000f;border:1px solid var(--pink);border-radius:20px;padding:18px}
+.modalTop{display:flex;justify-content:space-between;align-items:center}
+.close{background:#39000e;color:white;border:1px solid var(--red);border-radius:10px;padding:10px 14px}
+.footer{position:fixed;left:230px;right:0;bottom:0;background:#10001d;border-top:1px solid var(--line);padding:9px 18px;display:flex;justify-content:space-between;font-size:12px;color:#c6abd8}
+@media(max-width:1100px){
+  .app{grid-template-columns:1fr}.side{position:relative;width:100%;height:auto}.sideCard{position:relative;left:auto;right:auto;bottom:auto;margin-top:20px}.footer{left:0}.main{padding:14px}
+  .c2,.c3,.c4,.c5,.c6,.c7,.c8{grid-column:span 12}
+  .grid{gap:12px}.top{flex-direction:column;align-items:stretch}
+}
+</style>
+</head>
+<body>
+<div class="app">
+<aside class="side">
+  <div class="logo">☰ ApexQuant</div>
+  <div class="nav">
+    <button class="active" onclick="show('dashboard',this)">🏠 Dashboard</button>
+    <button onclick="show('live',this)">〽 Live Trades</button>
+    <button onclick="show('scanner',this)">◎ Market Scanner</button>
+    <button onclick="show('learning',this)">🧠 Learning Brain</button>
+    <button onclick="show('closed',this)">📄 Closed Trades</button>
+    <button onclick="show('system',this)">⚙ System</button>
+  </div>
+  <div class="sideCard">
+    <div class="green">● BOT STATUS</div>
+    <h2 id="botStatus">LOADING</h2>
+    <p>Version <b id="version">-</b></p>
+    <button class="sellAll" onclick="sellAll()">SELL ALL POSITIONS</button>
+  </div>
+</aside>
+
+<main class="main">
+  <div class="top">
+    <input class="search" placeholder="Search pairs, trades, learning, bot thinking..." />
+    <div class="status"><span id="live" class="pill">CONNECTING</span><span id="clock" class="pill">--:-- UTC</span></div>
+  </div>
+
+  <section id="dashboard" class="tab active">
+    <div class="grid">
+      <div class="card c3"><h3>Strategy P&L</h3><div id="strategyPnl" class="big">£0.00</div><canvas id="sparkA" class="kpiSpark"></canvas></div>
+      <div class="card c3"><h3>Scalp P&L</h3><div id="scalpPnl" class="big">£0.00</div><canvas id="sparkB" class="kpiSpark"></canvas></div>
+      <div class="card c3"><h3>Total P&L Today</h3><div id="totalPnl" class="big">£0.00</div><canvas id="sparkC" class="kpiSpark"></canvas></div>
+      <div class="card c3"><h3>Daily Target £200</h3><div id="targetPct" class="big cyan">0%</div><div class="bar"><div id="targetBar"></div></div></div>
+
+      <div class="card c8"><h3>Equity Curve</h3><canvas id="equity"></canvas></div>
+      <div class="card c4"><h3>Market Environment</h3><div id="environment"></div></div>
+
+      <div class="card c8">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <h3>Open Trades</h3>
+          <div><button class="expand" onclick="openModal()">Expand</button> <button class="sellAll" onclick="sellAll()">Sell All</button></div>
+        </div>
+        <div id="openCards"></div>
+      </div>
+      <div class="card c4"><h3>Bot Brain Latest</h3><div id="brain"></div></div>
+
+      <div class="card c4"><h3>Biggest Winners</h3><div id="winners"></div></div>
+      <div class="card c4"><h3>Biggest Losers</h3><div id="losers"></div></div>
+      <div class="card c4"><h3>Learning Top Setups</h3><table id="learnMini"></table></div>
+    </div>
+  </section>
+
+  <section id="live" class="tab"><div class="card c12"><h3>Live Trades Full Screen</h3><div id="liveCards"></div></div></section>
+  <section id="scanner" class="tab"><div class="card c12"><h3>Live Pair Reviews</h3><table id="scannerTable"></table></div></section>
+  <section id="learning" class="tab"><div class="card c12"><h3>Learning Brain</h3><table id="learningTable"></table></div></section>
+  <section id="closed" class="tab"><div class="card c12"><h3>Closed Trades</h3><table id="closedTable"></table></div></section>
+  <section id="system" class="tab"><div class="card c12"><h3>System</h3><pre id="systemInfo"></pre></div></section>
+</main>
+</div>
+
+<div class="footer"><span id="feed">DATA FEED</span><span id="reviewCount">Reviewed pairs: -</span><span id="updated">Last update: -</span></div>
+
+<div id="modal" class="modal">
+  <div class="modalBox">
+    <div class="modalTop"><h2>Expanded Open Trades — Bot Thinking & Exit Plans</h2><button class="close" onclick="closeModal()">Close</button></div>
+    <div id="modalTrades"></div>
+  </div>
+</div>
+
+<script>
+const API="http://178.62.123.108:8094";
+let DATA=null;
+function money(v){return "£"+Number(v||0).toFixed(2)}
+function colour(v){return Number(v||0)>=0?"green":"red"}
+function safe(v){return v??""}
+function show(id,el){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));document.getElementById(id).classList.add("active");document.querySelectorAll(".nav button").forEach(b=>b.classList.remove("active"));el.classList.add("active")}
+async function post(url){return fetch(API+url,{method:"POST"}).then(r=>r.json())}
+async function sellAll(){if(confirm("Sell ALL positions now?")){await post("/api/close-all");load()}}
+async function sell(id){if(confirm("Sell this trade now?")){await post("/api/trades/"+id+"/panic-sell");load()}}
+function openModal(){document.getElementById("modal").style.display="block";renderTrades(DATA)}
+function closeModal(){document.getElementById("modal").style.display="none"}
+
+function chart(id,vals,color="#00f5ff"){
+ const c=document.getElementById(id),x=c.getContext("2d");c.width=c.offsetWidth;c.height=c.offsetHeight;x.clearRect(0,0,c.width,c.height);if(!vals.length)return;
+ const min=Math.min(...vals),max=Math.max(...vals);x.strokeStyle="#32124a";x.lineWidth=1;for(let i=0;i<5;i++){let y=i*c.height/4;x.beginPath();x.moveTo(0,y);x.lineTo(c.width,y);x.stroke()}
+ x.strokeStyle=color;x.lineWidth=3;x.beginPath();vals.forEach((v,i)=>{let px=i*c.width/Math.max(1,vals.length-1),py=c.height-((v-min)/Math.max(1,max-min))*c.height;if(i)x.lineTo(px,py);else x.moveTo(px,py)});x.stroke()
+}
+
+function tradeHTML(t){
+ const pnl=Number(t.pnl?.netGbp||0);
+ return `<div class="tradeCard">
+  <div class="tradeHead"><div><b>${t.symbol}</b> <span class="pill">${t.pot}</span> <span class="${t.side==="LONG"?"green":"yellow"}">${t.side}</span></div><button class="sell" onclick="sell('${t.id}')">SELL NOW</button></div>
+  <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:12px">
+    <div>Entry<br><b>${safe(t.entryPrice)}</b></div><div>Current<br><b>${safe(t.currentPrice)}</b></div><div>P&L<br><b class="${colour(pnl)}">${money(pnl)}</b></div>
+    <div>Target<br><b>${money(t.targetNetGbp)}</b></div><div>Stop<br><b>${money(t.stopLossNetGbp)}</b></div><div>Confidence<br><b>${safe(t.confidence)}%</b></div>
+  </div>
+  <p><b>Bot thinking:</b> ${safe(t.botThinking)}</p>
+  <p><b>Exit plan:</b> Target ${money(t.targetNetGbp)} / Stop ${money(t.stopLossNetGbp)} / Trail ${safe(t.trailingStopPrice)}</p>
+ </div>`
+}
+function renderTrades(d){
+ const open=[...d.portfolios.scalp.openTrades,...d.portfolios.strategy.openTrades];
+ const html=open.length?open.map(tradeHTML).join(""):"<p>No open trades.</p>";
+ document.getElementById("openCards").innerHTML=html;
+ document.getElementById("liveCards").innerHTML=html;
+ document.getElementById("modalTrades").innerHTML=html;
+}
+
+function table(el,heads,rows){document.getElementById(el).innerHTML="<thead><tr>"+heads.map(h=>`<th>${h}</th>`).join("")+"</tr></thead><tbody>"+rows.join("")+"</tbody>"}
+
+function render(d){
+ DATA=d;
+ const s=d.portfolios.scalp,st=d.portfolios.strategy,total=Number(s.dailyPnlGbp||0)+Number(st.dailyPnlGbp||0);
+ document.getElementById("botStatus").textContent=d.engine.running&&!d.engine.paused?"RUNNING":"PAUSED";
+ document.getElementById("version").textContent=d.version;
+ document.getElementById("live").textContent=d.market.feedStatus==="connected"?"LIVE":"OFFLINE";
+ document.getElementById("live").className="pill "+(d.market.feedStatus==="connected"?"green":"red");
+ document.getElementById("strategyPnl").textContent=money(st.dailyPnlGbp);document.getElementById("strategyPnl").className="big "+colour(st.dailyPnlGbp);
+ document.getElementById("scalpPnl").textContent=money(s.dailyPnlGbp);document.getElementById("scalpPnl").className="big "+colour(s.dailyPnlGbp);
+ document.getElementById("totalPnl").textContent=money(total);document.getElementById("totalPnl").className="big "+colour(total);
+ let pct=Math.max(0,Math.min(100,total/200*100));document.getElementById("targetPct").textContent=Math.round(pct)+"%";document.getElementById("targetBar").style.width=pct+"%";
+
+ let env=d.environment||{};document.getElementById("environment").innerHTML=`
+  <div class="envRow"><b>Fear/Greed</b><div class="meter"><div style="width:${env.fearGreed?.value||0}%"></div></div><span>${env.fearGreed?.value||"-"}</span></div>
+  <div class="envRow"><b>BTC</b><div class="meter"><div style="width:55%"></div></div><span>${safe(env.btcRegime)}</span></div>
+  <div class="envRow"><b>BTC Mom</b><div class="meter"><div style="width:50%"></div></div><span>${safe(env.btcMomentum)}</span></div>
+  <div class="envRow"><b>ETH Mom</b><div class="meter"><div style="width:50%"></div></div><span>${safe(env.ethMomentum)}</span></div>
+  <div class="envRow"><b>Risk</b><div class="meter"><div style="width:70%"></div></div><span>${safe(env.macroRisk)}</span></div>`;
+
+ document.getElementById("brain").innerHTML=(d.brain||[]).slice(0,8).map(b=>`<div class="brain">${safe(b.type)} — ${safe(b.message)}</div>`).join("");
+ renderTrades(d);
+
+ const closed=d.recentTrades||[];
+ let curve=[],sum=0;[...closed].reverse().forEach(t=>{sum+=Number(t.pnl?.netGbp||0);curve.push(sum)});
+ chart("equity",curve,"#ff2bd6");chart("sparkA",curve.slice(-20),"#ff2bd6");chart("sparkB",curve.slice(-20),"#00f5ff");chart("sparkC",curve.slice(-20),"#8b2cff");
+
+ let all=[...s.closedTrades,...st.closedTrades];
+ document.getElementById("winners").innerHTML=[...all].sort((a,b)=>Number(b.pnl?.netGbp||0)-Number(a.pnl?.netGbp||0)).slice(0,5).map(t=>`<p>${t.symbol} <b class="green">${money(t.pnl?.netGbp)}</b></p>`).join("");
+ document.getElementById("losers").innerHTML=[...all].sort((a,b)=>Number(a.pnl?.netGbp||0)-Number(b.pnl?.netGbp||0)).slice(0,5).map(t=>`<p>${t.symbol} <b class="red">${money(t.pnl?.netGbp)}</b></p>`).join("");
+
+ table("closedTable",["Time","Pot","Pair","Side","Entry","Exit","P&L","Reason"],closed.slice(0,80).map(t=>`<tr><td>${safe(t.exitTime)}</td><td>${t.pot}</td><td>${t.symbol}</td><td>${t.side}</td><td>${safe(t.entryPrice)}</td><td>${safe(t.exitPrice)}</td><td class="${colour(t.pnl?.netGbp)}">${money(t.pnl?.netGbp)}</td><td>${safe(t.reasonExit)}</td></tr>`));
+
+ const learning=Object.values(d.setupLearning?.setups||{}).sort((a,b)=>Number(b.trades||0)-Number(a.trades||0));
+ const lrows=learning.map(x=>`<tr><td>${x.symbol}</td><td>${x.pot}</td><td>${x.side}</td><td>${x.setupType}</td><td>${x.trades}</td><td>${x.winRatePercent}%</td><td class="${colour(x.totalPnlGbp)}">${money(x.totalPnlGbp)}</td><td>${x.advice}</td></tr>`);
+ table("learningTable",["Pair","Pot","Side","Setup","Trades","Win %","P&L","Advice"],lrows);
+ table("learnMini",["Pair","Setup","P&L"],learning.slice(0,5).map(x=>`<tr><td>${x.symbol}</td><td>${x.setupType}</td><td class="${colour(x.totalPnlGbp)}">${money(x.totalPnlGbp)}</td></tr>`));
+
+ table("scannerTable",["Pot","Pair","Signal","Conf","Expected","Can Buy","Why","Learning"],(d.reviewedPairs||[]).map(r=>`<tr><td>${r.pot}</td><td>${r.symbol}</td><td>${r.signal}</td><td>${r.confidence}%</td><td>${money(r.expectedNetGbp)}</td><td>${r.canBuy}</td><td>${safe(r.whyNotBuying)}</td><td>${safe(r.learningAdvice)} ${safe(r.learningMessage)}</td></tr>`));
+
+ document.getElementById("systemInfo").textContent=JSON.stringify({version:d.version,engine:d.engine,market:d.market,reviewedPairs:d.reviewedPairs.length},null,2);
+ document.getElementById("feed").innerHTML=`DATA FEED ● <span class="${d.market.feedStatus==="connected"?"green":"red"}">${d.market.feedStatus}</span>`;
+ document.getElementById("reviewCount").textContent=`Messages: ${d.market.messageCount} | Reviewed pairs: ${d.reviewedPairs.length}`;
+ document.getElementById("updated").textContent="Last update: "+new Date().toLocaleTimeString();
+ document.getElementById("clock").textContent=new Date().toISOString().slice(11,19)+" UTC";
+}
+async function load(){try{let r=await fetch(API+"/api/state");render(await r.json())}catch(e){document.getElementById("live").textContent="OFFLINE";document.getElementById("live").className="pill red"}}
+load();setInterval(load,3000);
+</script>
+</body>
+</html>
+EOF
