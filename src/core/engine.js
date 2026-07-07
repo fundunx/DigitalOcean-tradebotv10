@@ -157,6 +157,99 @@ class Engine {
     return closed;
   }
 
+
+  classifyPaperTradeMode(review) {
+    const signals = [
+      ...(review.decision?.signalsUsed || []),
+      ...(review.scanner?.analysis?.signals || [])
+    ].map((signal) => String(signal).toLowerCase());
+
+    const joined = signals.join(" ");
+
+    if (
+      joined.includes("15m") ||
+      joined.includes("30m") ||
+      joined.includes("60m") ||
+      joined.includes("trend") ||
+      joined.includes("regime")
+    ) {
+      return "strategy";
+    }
+
+    return "scalp";
+  }
+
+  paperPotLimits(mode) {
+    if (mode === "strategy") {
+      return {
+        mode: "strategy",
+        maxTrades: this.config.paperExecution.maxStrategyTrades,
+        potGbp: this.config.paperExecution.strategyPotGbp
+      };
+    }
+
+    return {
+      mode: "scalp",
+      maxTrades: this.config.paperExecution.maxScalpTrades,
+      potGbp: this.config.paperExecution.scalpPotGbp
+    };
+  }
+
+  paperOpenTradesForMode(mode) {
+    return this.broker.openTrades.filter((trade) => (trade.tradeMode || trade.potName || "scalp") === mode);
+  }
+
+  paperOpenExposureForMode(mode) {
+    return this.paperOpenTradesForMode(mode).reduce((sum, trade) => sum + Number(trade.sizeGbp || 0), 0);
+  }
+
+  canOpenPaperTradeInMode(mode, sizeGbp) {
+    const limits = this.paperPotLimits(mode);
+    const openTrades = this.paperOpenTradesForMode(mode);
+    const exposure = this.paperOpenExposureForMode(mode);
+    const available = limits.potGbp - exposure;
+
+    if (openTrades.length >= limits.maxTrades) {
+      return {
+        approved: false,
+        reason: `${mode} paper pot already has ${openTrades.length}/${limits.maxTrades} open trades`
+      };
+    }
+
+    if (sizeGbp > available) {
+      return {
+        approved: false,
+        reason: `${mode} paper pot has £${available.toFixed(2)} available, cannot open £${sizeGbp.toFixed(2)}`
+      };
+    }
+
+    return {
+      approved: true,
+      available,
+      exposure,
+      maxTrades: limits.maxTrades,
+      potGbp: limits.potGbp
+    };
+  }
+
+  paperPotSummary() {
+    return ["scalp", "strategy"].map((mode) => {
+      const limits = this.paperPotLimits(mode);
+      const openTrades = this.paperOpenTradesForMode(mode);
+      const exposure = this.paperOpenExposureForMode(mode);
+
+      return {
+        mode,
+        potGbp: limits.potGbp,
+        maxTrades: limits.maxTrades,
+        openTrades: openTrades.length,
+        exposureGbp: exposure,
+        availableGbp: limits.potGbp - exposure
+      };
+    });
+  }
+
+
   runPaperExecutionCycle({ source = "paper.execution.cycle" } = {}) {
     if (this.config.mode !== "paper" || !this.config.liveTradingLocked) {
       throw new Error("paper execution requires paper mode with live trading locked");
@@ -195,13 +288,30 @@ class Engine {
       const market = this.cache.markets.get(review.symbol);
       if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
 
+      const tradeMode = this.classifyPaperTradeMode(review);
+      const requestedSizeGbp = Number(review.decision.sizeGbp || this.config.paperExecution.fixedTradeSizeGbp || this.config.trade.defaultSizeGbp);
+      const potCheck = this.canOpenPaperTradeInMode(tradeMode, requestedSizeGbp);
+
+      if (!potCheck.approved) {
+        this.events.append("paper.trade.rejected", {
+          symbol: review.symbol,
+          tradeMode,
+          sizeGbp: requestedSizeGbp,
+          reason: potCheck.reason
+        });
+        continue;
+      }
+
       const executionDecision = {
         ...review.decision,
         symbol: review.decision.symbol || review.symbol,
         side: review.decision.side || review.side || "long",
+        sizeGbp: requestedSizeGbp,
+        potName: tradeMode,
+        tradeMode,
         stopLossPct: Number.isFinite(review.decision.stopLossPct) ? review.decision.stopLossPct : 0.8,
         targetPct: Number.isFinite(review.decision.targetPct) ? review.decision.targetPct : 1.2,
-        entryReason: review.decision.entryReason || review.scanner?.reason || "paper execution approved setup"
+        entryReason: `[${tradeMode}] ${review.decision.entryReason || review.scanner?.reason || "paper execution approved setup"}`
       };
 
       const trade = this.broker.open(executionDecision, market.price);
@@ -225,6 +335,7 @@ class Engine {
       startedAt: this.startedAt,
       markets: this.cache.snapshot(),
       portfolio: this.broker.metrics(),
+      paperPots: this.paperPotSummary(),
       openTrades: this.broker.openTrades,
       closedTrades: this.broker.closedTrades,
       learning: {

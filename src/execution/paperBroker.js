@@ -22,6 +22,8 @@ class PaperBroker {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       symbol: decision.symbol,
       side: decision.side,
+      potName: decision.potName || decision.tradeMode || "unassigned",
+      tradeMode: decision.tradeMode || decision.potName || "unassigned",
       sizeGbp: decision.sizeGbp,
       entryPrice: price,
       openedAt: new Date().toISOString(),
