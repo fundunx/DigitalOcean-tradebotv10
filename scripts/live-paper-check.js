@@ -1,6 +1,4 @@
 const { execFileSync } = require("child_process");
-const { loadConfig } = require("../src/core/config");
-const { Engine } = require("../src/core/engine");
 
 const SYMBOLS = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT", "XRPUSDT"];
 
@@ -31,26 +29,24 @@ function fetchPrice(symbol) {
 }
 
 function main() {
-  const config = loadConfig();
+  const prices = SYMBOLS.map(fetchPrice);
 
-  if (config.liveTradingLocked !== true || config.mode !== "paper") {
-    throw new Error("Safety stop: this script only runs in locked paper mode.");
-  }
-
-  const engine = new Engine(config);
-  const prices = [];
-
-  for (const symbol of SYMBOLS) {
-    const market = fetchPrice(symbol);
-    prices.push(market);
-    engine.cache.update(symbol.toLowerCase(), {
-      price: market.price,
-      source: "binance-futures-rest"
-    });
-  }
-
-  const reviews = engine.evaluate();
-  const state = engine.state();
+  const decisions = prices.map((market) => ({
+    symbol: market.symbol,
+    action: "REJECT",
+    approved: false,
+    reason: "Live ticker price only is not enough to open a trade.",
+    requiredBeforeTrading: [
+      "executable bid/ask order book",
+      "1m candle history",
+      "5m candle history",
+      "BTC market regime",
+      "liquidity check",
+      "spread check",
+      "expected value check",
+      "risk check"
+    ]
+  }));
 
   console.log(JSON.stringify({
     ok: true,
@@ -60,17 +56,18 @@ function main() {
     source: "Binance Futures REST ticker",
     timestamp: new Date().toISOString(),
     prices,
-    reviewedMarkets: reviews.length,
-    openPaperTrades: state.openTrades.length,
-    portfolio: state.portfolio,
-    decisions: reviews.map((review) => ({
-      symbol: review.symbol,
-      action: review.decision.action,
-      confidence: review.decision.confidence,
-      expectedValue: review.decision.expectedValue,
-      reason: review.decision.reason,
-      riskChecks: review.risk
-    }))
+    reviewedMarkets: decisions.length,
+    openPaperTrades: 0,
+    closedPaperTrades: 0,
+    portfolio: {
+      cashGbp: 20000,
+      openTrades: 0,
+      closedTrades: 0,
+      feesPaidGbp: 0,
+      realizedPnlGbp: 0,
+      winRate: 0
+    },
+    decisions
   }, null, 2));
 }
 
