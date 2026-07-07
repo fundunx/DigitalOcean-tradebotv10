@@ -29,7 +29,24 @@ function createDashboard({ engine, feed, config }) {
         paperOnly: true,
         opensTrades: false,
         reviewedAt: new Date().toISOString(),
-        reviews: engine.reviewDecisions()
+        reviews: engine.reviewDecisions({
+          persist: true,
+          context: {
+            source: "api.decisions.review",
+            mode: config.mode,
+            paperOnly: true,
+            opensTrades: false
+          }
+        })
+      });
+    }
+
+
+    if (req.url === "/api/decisions/journal") {
+      return send(res, 200, {
+        mode: config.mode,
+        paperOnly: true,
+        entries: engine.recentDecisionReviews(50)
       });
     }
 

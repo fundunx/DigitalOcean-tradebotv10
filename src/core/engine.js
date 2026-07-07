@@ -6,6 +6,7 @@ const { PaperBroker } = require("../execution/paperBroker");
 const { WhatIf } = require("../learning/whatIf");
 const { LearningAdvisor } = require("../learning/learningAdvisor");
 const { EventStore } = require("../storage/eventStore");
+const { DecisionJournal } = require("../journal/decisionJournal");
 
 class Engine {
   constructor(config) {
@@ -18,6 +19,7 @@ class Engine {
     this.whatIf = new WhatIf();
     this.advisor = new LearningAdvisor();
     this.events = new EventStore();
+    this.decisionJournal = new DecisionJournal({ dataDir: config.dataDir });
     this.startedAt = new Date().toISOString();
   }
 
@@ -28,10 +30,10 @@ class Engine {
   }
 
 
-  reviewDecisions() {
+  reviewDecisions({ persist = false, context = {} } = {}) {
     const candidates = this.scanner.scan();
 
-    return candidates.map((candidate) => {
+    const reviews = candidates.map((candidate) => {
       const decision = this.decisions.decide(candidate);
       const risk = this.risk.check(decision, this.broker.openTrades);
 
@@ -59,6 +61,16 @@ class Engine {
         risk
       };
     });
+
+    if (persist) {
+      this.decisionJournal.appendBatch({ reviews, context });
+    }
+
+    return reviews;
+  }
+
+  recentDecisionReviews(limit = 50) {
+    return this.decisionJournal.recent(limit);
   }
 
   evaluate() {

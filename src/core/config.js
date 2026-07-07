@@ -20,6 +20,7 @@ function loadConfig(env = process.env) {
     mode: env.MODE || "paper",
     liveTradingLocked: boolEnv("LIVE_TRADING_LOCKED", true),
     dashboardApiToken: env.DASHBOARD_API_TOKEN || "",
+    dataDir: env.DATA_DIR || "data",
     symbols: listEnv("FEED_SYMBOLS", ["btcusdt", "ethusdt", "solusdt"]),
     staleAfterMs: numberEnv("FEED_STALE_AFTER_MS", 30000),
     startingBalanceGbp: numberEnv("STARTING_BALANCE_GBP", 20000),
