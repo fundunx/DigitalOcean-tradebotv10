@@ -16,6 +16,18 @@ function createDashboard({ engine, feed, config }) {
       return send(res, 200, engine.state(feed.health(config.staleAfterMs)));
     }
 
+
+    if (req.url === "/api/decisions/review") {
+      return send(res, 200, {
+        mode: config.mode,
+        liveTradingLocked: config.liveTradingLocked,
+        paperOnly: true,
+        opensTrades: false,
+        reviewedAt: new Date().toISOString(),
+        reviews: engine.reviewDecisions()
+      });
+    }
+
     if (req.url === "/api/readiness") {
       return send(res, 200, readiness({ config, feedHealth: feed.health(config.staleAfterMs) }));
     }

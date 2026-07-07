@@ -27,6 +27,40 @@ class Engine {
     });
   }
 
+
+  reviewDecisions() {
+    const candidates = this.scanner.scan();
+
+    return candidates.map((candidate) => {
+      const decision = this.decisions.decide(candidate);
+      const risk = this.risk.check(decision, this.broker.openTrades);
+
+      return {
+        symbol: candidate.symbol,
+        side: candidate.side,
+        scanner: {
+          passed: candidate.passed,
+          score: candidate.score,
+          reason: candidate.reason,
+          analysis: candidate.analysis
+        },
+        decision: {
+          approved: decision.approved,
+          confidence: decision.confidence,
+          sizeGbp: decision.sizeGbp,
+          expectedValue: decision.expectedValue,
+          entryReason: decision.entryReason,
+          scannerReason: decision.scannerReason,
+          signalsUsed: decision.signalsUsed,
+          riskLevel: decision.riskLevel,
+          rejectionReason: decision.rejectionReason,
+          alternatives: decision.alternatives
+        },
+        risk
+      };
+    });
+  }
+
   evaluate() {
     const candidates = this.scanner.scan();
     const reviews = [];
