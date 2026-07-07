@@ -1,6 +1,6 @@
 const { loadConfig } = require("./core/config");
 const { Engine } = require("./core/engine");
-const { BinanceFuturesFeed } = require("./market/binanceFeed");
+const { BinanceRestMarketFeed } = require("./market/binanceRestMarketFeed");
 const { createDashboard } = require("./dashboard/server");
 const { setupShutdown } = require("./core/shutdown");
 const { log } = require("./core/logger");
@@ -13,10 +13,9 @@ async function main() {
   }
 
   const engine = new Engine(config);
-  const feed = new BinanceFuturesFeed({ symbols: config.symbols, cache: engine.cache });
+  const feed = new BinanceRestMarketFeed({ symbols: config.symbols, cache: engine.cache });
 
   await feed.start();
-  engine.seedPaperMarket();
   // Do not auto-evaluate/open paper trades on startup. Wait for real market context.
 
   const server = createDashboard({ engine, feed, config });
