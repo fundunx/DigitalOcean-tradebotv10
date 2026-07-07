@@ -45,7 +45,8 @@ function loadConfig(env = process.env) {
       intervalMs: numberEnv("PAPER_EXECUTION_INTERVAL_MS", 60000, env),
       maxTradeAgeMs: numberEnv("PAPER_MAX_TRADE_AGE_MS", 1800000, env),
       minConfidence: numberEnv("PAPER_MIN_CONFIDENCE", paperTestMode ? 55 : 80, env),
-      minSignals: numberEnv("PAPER_MIN_SIGNALS", paperTestMode ? 1 : 3, env)
+      minSignals: numberEnv("PAPER_MIN_SIGNALS", paperTestMode ? 1 : 3, env),
+      fixedTradeSizeGbp: numberEnv("PAPER_FIXED_TRADE_SIZE_GBP", 0, env)
     }
   };
 }
