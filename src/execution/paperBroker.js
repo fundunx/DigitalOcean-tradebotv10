@@ -6,7 +6,8 @@ class PaperBroker {
     this.feesPaidGbp = 0;
   }
 
-  open(decision, price = 100) {
+  open(decision, price) {
+    if (!Number.isFinite(price) || price <= 0) throw new Error('valid live entry price required');
     const fee = decision.sizeGbp * 0.0004;
     const trade = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
