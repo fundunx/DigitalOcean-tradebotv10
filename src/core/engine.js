@@ -23,7 +23,7 @@ class Engine {
 
   seedPaperMarket() {
     this.config.symbols.forEach((symbol, index) => {
-      this.cache.update(symbol, { price: 100 + index });
+      // No fake startup prices. Real market data must populate the cache.
     });
   }
 

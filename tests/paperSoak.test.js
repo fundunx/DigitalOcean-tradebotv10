@@ -1,11 +1,16 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { spawnSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 
-test("paper soak script runs", () => {
-  const result = spawnSync(process.execPath, ["scripts/paper-soak.js"], { encoding: "utf8" });
-  assert.equal(result.status, 0);
-  const data = JSON.parse(result.stdout);
+test("paper soak script runs without requiring fake startup trades", () => {
+  const output = execFileSync("node", ["scripts/paper-soak.js"], {
+    encoding: "utf8"
+  });
+
+  const data = JSON.parse(output);
+
   assert.equal(data.ok, true);
-  assert.ok(data.closedTrades > 0);
+  assert.ok(Number.isFinite(data.closedTrades));
+  assert.ok(Number.isFinite(data.openTrades));
+  assert.ok(Number.isFinite(data.realizedPnlGbp));
 });

@@ -17,7 +17,7 @@ async function main() {
 
   await feed.start();
   engine.seedPaperMarket();
-  engine.evaluate();
+  // Do not auto-evaluate/open paper trades on startup. Wait for real market context.
 
   const server = createDashboard({ engine, feed, config });
 
