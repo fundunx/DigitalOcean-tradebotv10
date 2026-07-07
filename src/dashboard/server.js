@@ -28,11 +28,24 @@ function createDashboard({ engine, feed, config }) {
         liveTradingLocked: config.liveTradingLocked,
         paperOnly: true,
         opensTrades: false,
+        persists: false,
+        reviewedAt: new Date().toISOString(),
+        reviews: engine.reviewDecisions()
+      });
+    }
+
+    if (req.url === "/api/decisions/capture") {
+      return send(res, 200, {
+        mode: config.mode,
+        liveTradingLocked: config.liveTradingLocked,
+        paperOnly: true,
+        opensTrades: false,
+        persists: true,
         reviewedAt: new Date().toISOString(),
         reviews: engine.reviewDecisions({
           persist: true,
           context: {
-            source: "api.decisions.review",
+            source: "api.decisions.capture",
             mode: config.mode,
             paperOnly: true,
             opensTrades: false
