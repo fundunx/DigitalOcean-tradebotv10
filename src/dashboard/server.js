@@ -12,6 +12,11 @@ function createDashboard({ engine, feed, config }) {
       return send(res, 200, { ok: true });
     }
 
+
+    if (req.url === "/api/summary") {
+      return send(res, 200, engine.summary(feed.health(config.staleAfterMs)));
+    }
+
     if (req.url === "/api/state") {
       return send(res, 200, engine.state(feed.health(config.staleAfterMs)));
     }

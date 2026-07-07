@@ -82,6 +82,36 @@ class Engine {
     return reviews;
   }
 
+
+  summary(feedHealth = null) {
+    const markets = this.cache.snapshot().map((market) => ({
+      symbol: market.symbol,
+      source: market.source,
+      realMarketData: market.realMarketData === true,
+      price: market.price,
+      bid: market.bid,
+      ask: market.ask,
+      spread: market.spread,
+      updatedAt: market.updatedAt,
+      candles1m: Array.isArray(market.candles1m) ? market.candles1m.length : 0
+    }));
+
+    return {
+      name: "ApexQuant V10",
+      mode: this.config.mode,
+      liveTradingLocked: this.config.liveTradingLocked,
+      paperOnly: true,
+      startedAt: this.startedAt,
+      marketCount: markets.length,
+      markets,
+      portfolio: this.broker.metrics(),
+      openTrades: this.broker.openTrades.length,
+      closedTrades: this.broker.closedTrades.length,
+      feedHealth,
+      latestEvents: this.events.recent().slice(0, 10)
+    };
+  }
+
   state(feedHealth = null) {
     return {
       name: "ApexQuant V10",
