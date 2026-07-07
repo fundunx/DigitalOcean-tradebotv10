@@ -21,9 +21,12 @@ class DecisionEngine {
     if (!candidate.passed) blocked.push(candidate.reason || "candidate did not pass scanner");
     if (analysis.realMarketData !== true) blocked.push("real market data required");
     if (!Number.isFinite(analysis.price) || analysis.price <= 0) blocked.push("valid live price required");
-    if (!Number.isFinite(confidence) || confidence < 80) blocked.push("confidence below minimum");
+    const minConfidence = this.config.paperExecution?.minConfidence ?? 80;
+    const minSignals = this.config.paperExecution?.minSignals ?? 3;
+
+    if (!Number.isFinite(confidence) || confidence < minConfidence) blocked.push("confidence below minimum");
     if (!ev || ev.netPct <= 0) blocked.push("expected value did not clear costs");
-    if (!Array.isArray(analysis.signals) || analysis.signals.length < 3) blocked.push("insufficient confirming signals");
+    if (!Array.isArray(analysis.signals) || analysis.signals.length < minSignals) blocked.push("insufficient confirming signals");
 
     const sizeGbp = blocked.length
       ? 0

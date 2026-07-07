@@ -55,6 +55,16 @@ function createDashboard({ engine, feed, config }) {
     }
 
 
+
+    if (req.url === "/api/paper/cycle") {
+      return send(res, 200, {
+        mode: config.mode,
+        liveTradingLocked: config.liveTradingLocked,
+        paperOnly: true,
+        result: engine.runPaperExecutionCycle({ source: "api.paper.cycle" })
+      });
+    }
+
     if (req.url === "/api/decisions/journal") {
       return send(res, 200, {
         mode: config.mode,

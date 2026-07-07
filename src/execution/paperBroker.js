@@ -7,7 +7,16 @@ class PaperBroker {
   }
 
   open(decision, price) {
-    if (!Number.isFinite(price) || price <= 0) throw new Error('valid live entry price required');
+    if (!Number.isFinite(price) || price <= 0) throw new Error("valid live entry price required");
+    if (!decision.symbol) throw new Error("paper trade requires symbol");
+    if (!decision.side) throw new Error("paper trade requires side");
+    if (!Number.isFinite(decision.stopLossPct) || decision.stopLossPct <= 0) {
+      throw new Error("paper trade requires positive stopLossPct");
+    }
+    if (!Number.isFinite(decision.targetPct) || decision.targetPct <= 0) {
+      throw new Error("paper trade requires positive targetPct");
+    }
+
     const fee = decision.sizeGbp * 0.0004;
     const trade = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
@@ -35,9 +44,20 @@ class PaperBroker {
     const [trade] = this.openTrades.splice(index, 1);
     const direction = trade.side === "short" ? -1 : 1;
     const pnl = trade.sizeGbp * ((price - trade.entryPrice) / trade.entryPrice) * direction;
-    const closed = { ...trade, exitPrice: price, exitReason, pnlGbp: pnl, closedAt: new Date().toISOString() };
+    const closeFee = trade.sizeGbp * 0.0004;
+    const netPnl = pnl - closeFee;
+    const closed = {
+      ...trade,
+      exitPrice: price,
+      exitReason,
+      pnlGbp: netPnl,
+      grossPnlGbp: pnl,
+      closeFee,
+      closedAt: new Date().toISOString()
+    };
     this.closedTrades.push(closed);
-    this.cashGbp += pnl;
+    this.cashGbp += netPnl;
+    this.feesPaidGbp += closeFee;
     return closed;
   }
 

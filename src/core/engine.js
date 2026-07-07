@@ -12,7 +12,7 @@ class Engine {
   constructor(config) {
     this.config = config;
     this.cache = new MarketCache();
-    this.scanner = new Scanner({ cache: this.cache });
+    this.scanner = new Scanner({ cache: this.cache, config });
     this.decisions = new DecisionEngine({ config });
     this.risk = new RiskEngine({ config });
     this.broker = new PaperBroker({ startingBalanceGbp: config.startingBalanceGbp });
@@ -121,6 +121,99 @@ class Engine {
       closedTrades: this.broker.closedTrades.length,
       feedHealth,
       latestEvents: this.events.recent().slice(0, 10)
+    };
+  }
+
+
+  closeManagedPaperTrades({ now = Date.now(), reasonPrefix = "paper execution" } = {}) {
+    const closed = [];
+
+    for (const trade of [...this.broker.openTrades]) {
+      const market = this.cache.markets.get(trade.symbol);
+      if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
+
+      const direction = trade.side === "short" ? -1 : 1;
+      const pnlPct = ((market.price - trade.entryPrice) / trade.entryPrice) * 100 * direction;
+      const ageMs = now - new Date(trade.openedAt).getTime();
+
+      let exitReason = null;
+      if (pnlPct <= -Math.abs(trade.stopLossPct)) {
+        exitReason = `${reasonPrefix}: stop loss hit`;
+      } else if (pnlPct >= Math.abs(trade.targetPct)) {
+        exitReason = `${reasonPrefix}: profit target hit`;
+      } else if (ageMs >= this.config.paperExecution.maxTradeAgeMs) {
+        exitReason = `${reasonPrefix}: max trade age reached`;
+      }
+
+      if (exitReason) {
+        const closedTrade = this.broker.close(trade.id, market.price, exitReason);
+        if (closedTrade) {
+          closed.push(closedTrade);
+          this.events.append("paper.trade.closed", closedTrade);
+        }
+      }
+    }
+
+    return closed;
+  }
+
+  runPaperExecutionCycle({ source = "paper.execution.cycle" } = {}) {
+    if (this.config.mode !== "paper" || !this.config.liveTradingLocked) {
+      throw new Error("paper execution requires paper mode with live trading locked");
+    }
+
+    if (!this.config.paperExecution.enabled) {
+      return {
+        enabled: false,
+        opened: [],
+        closed: [],
+        reviews: [],
+        reason: "paper execution disabled"
+      };
+    }
+
+    const closed = this.closeManagedPaperTrades({ reasonPrefix: source });
+    const closedSymbols = new Set(closed.map((trade) => trade.symbol));
+
+    const reviews = this.reviewDecisions({
+      persist: true,
+      context: {
+        source,
+        mode: this.config.mode,
+        paperOnly: true,
+        opensTrades: true,
+        testMode: this.config.paperExecution.testMode
+      }
+    });
+
+    const opened = [];
+
+    for (const review of reviews) {
+      if (!review.risk.approved) continue;
+      if (closedSymbols.has(review.symbol)) continue;
+
+      const market = this.cache.markets.get(review.symbol);
+      if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
+
+      const executionDecision = {
+        ...review.decision,
+        symbol: review.decision.symbol || review.symbol,
+        side: review.decision.side || review.side || "long",
+        stopLossPct: Number.isFinite(review.decision.stopLossPct) ? review.decision.stopLossPct : 0.8,
+        targetPct: Number.isFinite(review.decision.targetPct) ? review.decision.targetPct : 1.2,
+        entryReason: review.decision.entryReason || review.scanner?.reason || "paper execution approved setup"
+      };
+
+      const trade = this.broker.open(executionDecision, market.price);
+      opened.push(trade);
+      this.events.append("paper.trade.opened", trade);
+    }
+
+    return {
+      enabled: true,
+      opened,
+      closed,
+      reviews
     };
   }
 

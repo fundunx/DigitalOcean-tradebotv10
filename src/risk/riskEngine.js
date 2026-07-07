@@ -7,7 +7,8 @@ class RiskEngine {
     if (!decision.approved) return { approved: false, reason: decision.rejectionReason };
     if (decision.analysis?.realMarketData !== true) return { approved: false, reason: "real market data required" };
     if (!decision.entryReason) return { approved: false, reason: "missing entry reason" };
-    if (!Array.isArray(decision.signalsUsed) || decision.signalsUsed.length < 3) {
+    const minSignals = this.config.paperExecution?.minSignals ?? 3;
+    if (!Array.isArray(decision.signalsUsed) || decision.signalsUsed.length < minSignals) {
       return { approved: false, reason: "insufficient signal explanation" };
     }
     if (!decision.stopLossPct) return { approved: false, reason: "missing stop loss" };

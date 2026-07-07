@@ -18,6 +18,24 @@ async function main() {
   await feed.start();
   // Do not auto-evaluate/open paper trades on startup. Wait for real market context.
 
+  let paperExecutionTimer = null;
+
+  if (config.paperExecution.enabled) {
+    paperExecutionTimer = setInterval(() => {
+      try {
+        const result = engine.runPaperExecutionCycle({ source: "paper.execution.timer" });
+        log("info", "paper execution cycle", {
+          opened: result.opened.length,
+          closed: result.closed.length,
+          reviews: result.reviews.length,
+          testMode: config.paperExecution.testMode
+        });
+      } catch (error) {
+        log("error", "paper execution cycle failed", { error: error.message });
+      }
+    }, config.paperExecution.intervalMs);
+  }
+
   const server = createDashboard({ engine, feed, config });
 
   server.listen(config.port, () => {
@@ -25,6 +43,9 @@ async function main() {
   });
 
   setupShutdown([
+    () => {
+      if (paperExecutionTimer) clearInterval(paperExecutionTimer);
+    },
     () => feed.stop(),
     () => new Promise((resolve) => server.close(resolve))
   ]);
