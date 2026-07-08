@@ -1,3 +1,18 @@
+const fs = require("fs");
+const path = require("path");
+
+function appendPaperTradeLedger(type, trade) {
+  const dataDir = process.env.DATA_DIR || "data";
+  const file = path.join(dataDir, "paper-trades.jsonl");
+
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.appendFileSync(file, JSON.stringify({
+    type,
+    at: new Date().toISOString(),
+    trade
+  }) + "\n");
+}
+
 class PaperBroker {
   constructor({ startingBalanceGbp = 20000 } = {}) {
     this.cashGbp = startingBalanceGbp;
@@ -37,6 +52,7 @@ class PaperBroker {
     this.cashGbp -= fee;
     this.feesPaidGbp += fee;
     this.openTrades.push(trade);
+    appendPaperTradeLedger("paper.trade.opened", trade);
     return trade;
   }
 
@@ -58,6 +74,7 @@ class PaperBroker {
       closedAt: new Date().toISOString()
     };
     this.closedTrades.push(closed);
+    appendPaperTradeLedger("paper.trade.closed", closed);
     this.cashGbp += netPnl;
     this.feesPaidGbp += closeFee;
     return closed;
