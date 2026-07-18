@@ -1,0 +1,58 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ApexQuant V10 Paper Dashboard</title>
+  <style>
+    body { background:#070b12; color:#eaf2ff; font-family:Arial,sans-serif; padding:24px; }
+    h1 { color:#7dd3fc; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:16px; }
+    .card { background:#111827; border:1px solid #263244; border-radius:16px; padding:18px; }
+    .label { color:#94a3b8; font-size:13px; }
+    .value { font-size:28px; font-weight:700; margin-top:6px; }
+    .safe { color:#22c55e; }
+    .warn { color:#f59e0b; }
+    pre { background:#020617; padding:16px; border-radius:12px; overflow:auto; }
+  </style>
+</head>
+<body>
+  <h1>ApexQuant V10</h1>
+  <p>Paper trading dashboard. Live trading should remain locked.</p>
+
+  <div class="grid">
+    <div class="card"><div class="label">Mode</div><div id="mode" class="value"></div></div>
+    <div class="card"><div class="label">Live Trading Locked</div><div id="locked" class="value"></div></div>
+    <div class="card"><div class="label">Paper Only</div><div id="paper" class="value"></div></div>
+    <div class="card"><div class="label">Cash GBP</div><div id="cash" class="value"></div></div>
+    <div class="card"><div class="label">Open Trades</div><div id="open" class="value"></div></div>
+    <div class="card"><div class="label">Closed Trades</div><div id="closed" class="value"></div></div>
+    <div class="card"><div class="label">Feed Health</div><div id="feed" class="value"></div></div>
+    <div class="card"><div class="label">Markets</div><div id="markets" class="value"></div></div>
+  </div>
+
+  <h2>Raw Summary</h2>
+  <pre id="raw">Loading...</pre>
+
+<script>
+async function load() {
+  const res = await fetch('http://178.62.123.108:3000/api/summary');
+  const d = await res.json();
+
+  document.getElementById('mode').textContent = d.mode || 'unknown';
+  document.getElementById('locked').textContent = d.liveTradingLocked ? 'YES' : 'NO';
+  document.getElementById('locked').className = 'value ' + (d.liveTradingLocked ? 'safe' : 'warn');
+  document.getElementById('paper').textContent = d.paperOnly ? 'YES' : 'NO';
+  document.getElementById('paper').className = 'value ' + (d.paperOnly ? 'safe' : 'warn');
+  document.getElementById('cash').textContent = '£' + (d.portfolio?.cashGbp ?? 0);
+  document.getElementById('open').textContent = d.openTrades ?? d.portfolio?.openTrades ?? 0;
+  document.getElementById('closed').textContent = d.closedTrades ?? d.portfolio?.closedTrades ?? 0;
+  document.getElementById('feed').textContent = d.feedHealth?.stale ? 'STALE' : 'OK';
+  document.getElementById('feed').className = 'value ' + (d.feedHealth?.stale ? 'warn' : 'safe');
+  document.getElementById('markets').textContent = d.marketCount ?? d.markets?.length ?? 0;
+  document.getElementById('raw').textContent = JSON.stringify(d, null, 2);
+}
+load();
+setInterval(load, 10000);
+</script>
+</body>
+</html>
