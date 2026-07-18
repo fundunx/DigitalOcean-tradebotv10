@@ -1,4 +1,6 @@
+const fs = require("fs");
 const http = require("http");
+const path = require("path");
 const { readiness } = require("../core/readiness");
 
 function send(res, status, data) {
@@ -6,12 +8,33 @@ function send(res, status, data) {
   res.end(JSON.stringify(data, null, 2));
 }
 
+function sendHtml(res, status, html) {
+  res.writeHead(status, {
+    "content-type": "text/html; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  res.end(html);
+}
+
 function createDashboard({ engine, feed, config }) {
   return http.createServer((req, res) => {
+    if (req.url === "/" || req.url === "/dashboard" || req.url === "/dashboard.html") {
+      const dashboardPath = path.join(process.cwd(), "dashboard.html");
+
+      if (!fs.existsSync(dashboardPath)) {
+        return send(res, 404, { error: "dashboard.html not found" });
+      }
+
+      return sendHtml(res, 200, fs.readFileSync(dashboardPath, "utf8"));
+    }
+
     if (req.url === "/health") {
       return send(res, 200, { ok: true });
     }
 
+    if (req.url === "/api/health") {
+      return send(res, 200, { ok: true });
+    }
 
     if (req.url === "/api/summary") {
       return send(res, 200, engine.summary(feed.health(config.staleAfterMs)));
@@ -20,7 +43,6 @@ function createDashboard({ engine, feed, config }) {
     if (req.url === "/api/state") {
       return send(res, 200, engine.state(feed.health(config.staleAfterMs)));
     }
-
 
     if (req.url === "/api/decisions/review") {
       return send(res, 200, {
@@ -53,8 +75,6 @@ function createDashboard({ engine, feed, config }) {
         })
       });
     }
-
-
 
     if (req.url === "/api/paper/cycle") {
       return send(res, 200, {

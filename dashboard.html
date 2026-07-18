@@ -35,7 +35,7 @@
 
 <script>
 async function load() {
-  const res = await fetch('http://178.62.123.108:3000/api/summary');
+  const res = await fetch('/api/summary');
   const d = await res.json();
 
   document.getElementById('mode').textContent = d.mode || 'unknown';
