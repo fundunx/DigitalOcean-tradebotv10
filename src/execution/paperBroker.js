@@ -13,12 +13,46 @@ function appendPaperTradeLedger(type, trade) {
   }) + "\n");
 }
 
+function paperBrokerStateFile() {
+  const dataDir = process.env.DATA_DIR;
+  return dataDir ? path.join(dataDir, "paper-broker-state.json") : null;
+}
+
+function loadPaperBrokerState() {
+  const file = paperBrokerStateFile();
+  if (!file || !fs.existsSync(file)) return null;
+
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+function persistPaperBrokerState(broker) {
+  const file = paperBrokerStateFile();
+  if (!file) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({
+    cashGbp: broker.cashGbp,
+    openTrades: broker.openTrades,
+    closedTrades: broker.closedTrades,
+    feesPaidGbp: broker.feesPaidGbp
+  }, null, 2));
+}
+
 class PaperBroker {
   constructor({ startingBalanceGbp = 20000 } = {}) {
-    this.cashGbp = startingBalanceGbp;
-    this.openTrades = [];
-    this.closedTrades = [];
-    this.feesPaidGbp = 0;
+    const recovered = loadPaperBrokerState();
+
+    this.cashGbp = Number(
+      recovered?.cashGbp ?? recovered?.portfolio?.cashGbp ?? startingBalanceGbp
+    );
+    this.openTrades = Array.isArray(recovered?.openTrades) ? recovered.openTrades : [];
+    this.closedTrades = Array.isArray(recovered?.closedTrades) ? recovered.closedTrades : [];
+    this.feesPaidGbp = Number(
+      recovered?.feesPaidGbp ?? recovered?.portfolio?.feesPaidGbp ?? 0
+    );
   }
 
   open(decision, price) {
@@ -52,6 +86,7 @@ class PaperBroker {
     this.cashGbp -= fee;
     this.feesPaidGbp += fee;
     this.openTrades.push(trade);
+    persistPaperBrokerState(this);
     appendPaperTradeLedger("paper.trade.opened", trade);
     return trade;
   }
@@ -77,6 +112,7 @@ class PaperBroker {
     appendPaperTradeLedger("paper.trade.closed", closed);
     this.cashGbp += netPnl;
     this.feesPaidGbp += closeFee;
+    persistPaperBrokerState(this);
     return closed;
   }
 
