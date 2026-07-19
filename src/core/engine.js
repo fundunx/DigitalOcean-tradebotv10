@@ -204,6 +204,19 @@ class Engine {
   }
 
   canOpenPaperTradeInMode(mode, sizeGbp) {
+    const totalExposure = this.broker.openTrades.reduce(
+      (sum, trade) => sum + Number(trade.sizeGbp || 0),
+      0
+    );
+    const totalAvailable = this.config.paperExecution.totalPotGbp - totalExposure;
+
+    if (sizeGbp > totalAvailable) {
+      return {
+        approved: false,
+        reason: `paper allocation has £${totalAvailable.toFixed(2)} available, cannot open £${sizeGbp.toFixed(2)}`
+      };
+    }
+
     const limits = this.paperPotLimits(mode);
     const openTrades = this.paperOpenTradesForMode(mode);
     const exposure = this.paperOpenExposureForMode(mode);
@@ -280,8 +293,17 @@ class Engine {
     });
 
     const opened = [];
+    const rankedReviews = [...reviews].sort((left, right) => {
+      const leftConfidence = Number(left.decision?.confidence || 0);
+      const rightConfidence = Number(right.decision?.confidence || 0);
+      const leftExpectedValue = Number(left.decision?.expectedValue?.netPct || 0);
+      const rightExpectedValue = Number(right.decision?.expectedValue?.netPct || 0);
 
-    for (const review of reviews) {
+      return (rightConfidence - leftConfidence)
+        || (rightExpectedValue - leftExpectedValue);
+    });
+
+    for (const review of rankedReviews) {
       if (!review.risk.approved) continue;
       if (closedSymbols.has(review.symbol)) continue;
 

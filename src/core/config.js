@@ -23,7 +23,7 @@ function loadConfig(env = process.env) {
     liveTradingLocked: boolEnv("LIVE_TRADING_LOCKED", true, env),
     dashboardApiToken: env.DASHBOARD_API_TOKEN || "",
     dataDir: env.DATA_DIR || "data",
-    symbols: listEnv("FEED_SYMBOLS", ["btcusdt", "ethusdt", "solusdt"], env),
+    symbols: listEnv("FEED_SYMBOLS", [], env),
     staleAfterMs: numberEnv("FEED_STALE_AFTER_MS", 30000, env),
     startingBalanceGbp: numberEnv("STARTING_BALANCE_GBP", 20000, env),
     trade: {
@@ -46,11 +46,12 @@ function loadConfig(env = process.env) {
       maxTradeAgeMs: numberEnv("PAPER_MAX_TRADE_AGE_MS", 1800000, env),
       minConfidence: numberEnv("PAPER_MIN_CONFIDENCE", paperTestMode ? 55 : 80, env),
       minSignals: numberEnv("PAPER_MIN_SIGNALS", paperTestMode ? 1 : 3, env),
-      fixedTradeSizeGbp: numberEnv("PAPER_FIXED_TRADE_SIZE_GBP", 0, env),
+      fixedTradeSizeGbp: numberEnv("PAPER_FIXED_TRADE_SIZE_GBP", 2000, env),
       maxScalpTrades: numberEnv("PAPER_MAX_SCALP_TRADES", 5, env),
       maxStrategyTrades: numberEnv("PAPER_MAX_STRATEGY_TRADES", 5, env),
       scalpPotGbp: numberEnv("PAPER_SCALP_POT_GBP", 10000, env),
-      strategyPotGbp: numberEnv("PAPER_STRATEGY_POT_GBP", 10000, env)
+      strategyPotGbp: numberEnv("PAPER_STRATEGY_POT_GBP", 10000, env),
+      totalPotGbp: numberEnv("PAPER_TOTAL_POT_GBP", 10000, env)
     }
   };
 }

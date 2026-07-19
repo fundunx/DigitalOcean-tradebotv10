@@ -1,6 +1,9 @@
+const { discoverTopUsdtPerpetualMarkets } = require("./topMarkets");
+
 class BinanceRestMarketFeed {
-  constructor({ symbols, cache, intervalMs = 15000 }) {
+  constructor({ symbols = [], cache, intervalMs = 60000, universeSize = 100 } = {}) {
     this.symbols = symbols;
+    this.universeSize = universeSize;
     this.cache = cache;
     this.intervalMs = intervalMs;
     this.timer = null;
@@ -13,6 +16,10 @@ class BinanceRestMarketFeed {
     if (this.started) return;
 
     this.started = true;
+    if (!this.symbols.length) {
+      const markets = await discoverTopUsdtPerpetualMarkets({ limit: this.universeSize });
+      this.symbols = markets.map((market) => market.symbol);
+    }
     await this.refreshAll();
 
     this.timer = setInterval(() => {
@@ -33,8 +40,11 @@ class BinanceRestMarketFeed {
   }
 
   async refreshAll() {
-    for (const symbol of this.symbols) {
-      await this.refreshSymbol(symbol);
+    const batchSize = 10;
+
+    for (let start = 0; start < this.symbols.length; start += batchSize) {
+      const batch = this.symbols.slice(start, start + batchSize);
+      await Promise.all(batch.map((symbol) => this.refreshSymbol(symbol)));
     }
 
     this.lastMessageAt = new Date().toISOString();
