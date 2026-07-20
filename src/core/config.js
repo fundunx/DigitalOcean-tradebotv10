@@ -53,7 +53,8 @@ function loadConfig(env = process.env) {
       strategyPotGbp: numberEnv("PAPER_STRATEGY_POT_GBP", 10000, env),
       totalPotGbp: numberEnv("PAPER_TOTAL_POT_GBP", 20000, env),
       scalpWinnerBasketExitEnabled: boolEnv("PAPER_SCALP_WINNER_BASKET_EXIT_ENABLED", false, env),
-      scalpWinnerBasketTargetGbp: numberEnv("PAPER_SCALP_WINNER_BASKET_TARGET_GBP", 25, env)
+      scalpWinnerBasketTargetGbp: numberEnv("PAPER_SCALP_WINNER_BASKET_TARGET_GBP", 25, env),
+      scalpSingleWinnerTakeProfitGbp: numberEnv("PAPER_SCALP_SINGLE_WINNER_TAKE_PROFIT_GBP", 10, env)
     }
   };
 }

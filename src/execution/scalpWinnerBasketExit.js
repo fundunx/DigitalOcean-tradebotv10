@@ -73,8 +73,34 @@ function selectScalpWinnerBasketExit({
   };
 }
 
+function selectScalpSingleWinnerExits({
+  trades = [],
+  priceForSymbol,
+  targetGbp = 10,
+  feeRate = DEFAULT_FEE_RATE
+} = {}) {
+  const target = Number(targetGbp);
+
+  if (!finitePositive(target)) {
+    return { targetGbp: 0, winners: [] };
+  }
+
+  const selection = selectScalpWinnerBasketExit({
+    trades,
+    priceForSymbol,
+    targetGbp: Number.MAX_SAFE_INTEGER,
+    feeRate
+  });
+
+  return {
+    targetGbp: target,
+    winners: selection.winners.filter((winner) => winner.netPnlGbp >= target)
+  };
+}
+
 module.exports = {
   DEFAULT_FEE_RATE,
   projectedNetPnlAfterFees,
-  selectScalpWinnerBasketExit
+  selectScalpWinnerBasketExit,
+  selectScalpSingleWinnerExits
 };
