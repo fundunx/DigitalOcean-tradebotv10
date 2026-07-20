@@ -1,27 +1,332 @@
-<!doctype html><html><head><meta charset="utf-8"><title>ApexQuant Live Paper Dashboard</title>
-<style>
-body{margin:0;background:#08111f;color:#e7eefb;font:15px Arial;padding:20px}h1{margin:0;color:#7dd3fc}.sub{color:#93a4bb}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}.card,table{background:#101c2d;border:1px solid #263956;border-radius:12px}.card{padding:14px}.label{color:#93a4bb;font-size:12px}.value{font-size:24px;font-weight:bold;margin-top:6px}.up{color:#4ade80}.down{color:#fb7185}table{border-collapse:collapse;width:100%;overflow:hidden}th,td{padding:11px;text-align:left;border-bottom:1px solid #263956}th{color:#93c5fd}.wrap{overflow:auto}.small{color:#93a4bb;font-size:12px}
-</style></head><body>
-<h1>ApexQuant V10</h1><p class="sub">Live paper trading monitor · auto-refreshes every 5 seconds · live trading locked</p>
-<div class="grid" id="cards"></div><h2>Open paper trades</h2><div class="wrap" id="trades">Loading…</div>
-<script>
-const money=n=>`${n<0?'-':''}£${Math.abs(Number(n||0)).toFixed(2)}`;
-function card(label,value,cls=''){return `<div class="card"><div class="label">${label}</div><div class="value ${cls}">${value}</div></div>`}
-async function load(){
- const d=await (await fetch('/api/state')).json(), p=Object.fromEntries((d.markets||[]).map(m=>[m.symbol,m.price])), t=d.openTrades||[];
- const open=t.reduce((s,x)=>s+Number(x.sizeGbp||0)*((Number(p[x.symbol])-Number(x.entryPrice))/Number(x.entryPrice))*(x.side==='short'?-1:1),0);
- const total=Number(d.portfolio?.cashGbp||0)+open-20000, cls=n=>n>=0?'up':'down';
- document.querySelector('#cards').innerHTML=[
- card('Mode',`${d.mode||'unknown'} / ${d.liveTradingLocked?'LOCKED':'UNSAFE'}`,d.liveTradingLocked?'up':'down'),
- card('Markets watched',d.markets?.length||0),
- card('Open positions',t.length),
- card('Open exposure',money(t.reduce((s,x)=>s+Number(x.sizeGbp||0),0))),
- card('Unrealised P&L',money(open),cls(open)),
- card('Total P&L after paid fees',money(total),cls(total)),
- card('Realised P&L',money(d.portfolio?.realizedPnlGbp),cls(d.portfolio?.realizedPnlGbp)),
- card('Fees paid',money(d.portfolio?.feesPaidGbp))
- ].join('');
- document.querySelector('#trades').innerHTML=t.length?`<table><tr><th>Market</th><th>Side</th><th>Size</th><th>Entry</th><th>Now</th><th>Live P&L</th><th>Reason</th></tr>${t.map(x=>{const q=p[x.symbol],v=Number(x.sizeGbp)*((q-x.entryPrice)/x.entryPrice)*(x.side==='short'?-1:1);return `<tr><td>${x.symbol.toUpperCase()}</td><td>${x.side.toUpperCase()}</td><td>${money(x.sizeGbp)}</td><td>${x.entryPrice}</td><td>${q||'—'}</td><td class="${cls(v)}">${money(v)}</td><td class="small">${x.entryReason||'—'}</td></tr>`}).join('')}</table>`:'<p class="small">No open positions.</p>';
-}
-load();setInterval(load,5000);
-</script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ApexQuant Live Paper Dashboard</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --background: #08111f;
+      --panel: #101c2f;
+      --border: #233b5d;
+      --text: #e7eefb;
+      --muted: #93a4bb;
+      --green: #43db89;
+      --red: #fb7185;
+      --blue: #74b8ff;
+      --amber: #f7c948;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 20px;
+      background: var(--background);
+      color: var(--text);
+      font: 15px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1 { color: var(--blue); margin-bottom: 8px; }
+    h2 { margin: 34px 0 12px; }
+    .sub { color: var(--muted); }
+    .status {
+      display: inline-block;
+      padding: 5px 9px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .portfolio {
+      margin-top: 22px;
+      padding: 18px;
+      background: rgba(16, 28, 47, 0.55);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+    }
+    .portfolio h2 { margin: 0 0 6px; }
+    .portfolio.scalp h2 { color: var(--amber); }
+    .portfolio.strategy h2 { color: var(--blue); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+    .card {
+      min-height: 92px;
+      padding: 14px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .value {
+      margin-top: 8px;
+      font-size: 24px;
+      font-weight: 750;
+      line-height: 1.05;
+    }
+    .small-value { font-size: 17px; }
+    .up { color: var(--green); }
+    .down { color: var(--red); }
+    .neutral { color: var(--text); }
+    .warn { color: var(--amber); }
+    .table-wrap {
+      margin-top: 16px;
+      overflow-x: auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+    }
+    table { width: 100%; border-collapse: collapse; min-width: 830px; }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: 0; }
+    th {
+      color: var(--blue);
+      background: #0d192b;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    td.reason { max-width: 500px; color: var(--muted); }
+    .empty { padding: 18px; color: var(--muted); }
+    .error {
+      margin-top: 18px;
+      padding: 12px;
+      border: 1px solid var(--red);
+      border-radius: 10px;
+      color: var(--red);
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>ApexQuant V10</h1>
+  <p class="sub">
+    Live paper trading monitor · refreshes every 5 seconds ·
+    <span class="status">LIVE TRADING LOCKED</span>
+  </p>
+
+  <div class="grid" id="overview"></div>
+  <div class="error" id="error"></div>
+  <section class="portfolio strategy" id="strategy"></section>
+  <section class="portfolio scalp" id="scalp"></section>
+
+  <script>
+    const FEE_RATE = 0.0004;
+
+    const money = (value) =>
+      `£${Math.abs(Number(value || 0)).toFixed(2)}`;
+
+    const signedMoney = (value) =>
+      `${Number(value || 0) < 0 ? "-" : ""}${money(value)}`;
+
+    const displayClass = (value) =>
+      Number(value || 0) > 0 ? "up" : Number(value || 0) < 0 ? "down" : "neutral";
+
+    const escapeHtml = (value) =>
+      String(value ?? "").replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[character]));
+
+    const modeOf = (trade) =>
+      trade.tradeMode || trade.potName || "strategy";
+
+    function liveProjection(trade, price) {
+      const size = Number(trade.sizeGbp || 0);
+      const entry = Number(trade.entryPrice || 0);
+      const current = Number(price || 0);
+
+      if (!(size > 0 && entry > 0 && current > 0)) return 0;
+
+      const direction = trade.side === "short" ? -1 : 1;
+      const gross = size * ((current - entry) / entry) * direction;
+      const entryFee = Number(trade.fee || size * FEE_RATE);
+      const exitFee = size * FEE_RATE;
+
+      return gross - entryFee - exitFee;
+    }
+
+    function card(label, value, className = "") {
+      return `
+        <article class="card">
+          <div class="label">${escapeHtml(label)}</div>
+          <div class="value ${className}">${value}</div>
+        </article>
+      `;
+    }
+
+    function modeMetrics(data, mode) {
+      const openTrades = (data.openTrades || []).filter(
+        (trade) => modeOf(trade) === mode
+      );
+      const closedTrades = (data.closedTrades || []).filter(
+        (trade) => modeOf(trade) === mode
+      );
+      const prices = new Map(
+        (data.markets || []).map((market) => [market.symbol, market.price])
+      );
+      const pot = (data.paperPots || []).find((item) => item.mode === mode) || {};
+      const unrealisedPnlGbp = openTrades.reduce(
+        (sum, trade) => sum + liveProjection(trade, prices.get(trade.symbol)),
+        0
+      );
+      const realisedPnlGbp = closedTrades.reduce(
+        (sum, trade) => sum + Number(trade.pnlGbp || 0) - Number(trade.fee || 0),
+        0
+      );
+      const feesPaidGbp = [...openTrades, ...closedTrades].reduce(
+        (sum, trade) =>
+          sum +
+          Number(trade.fee || 0) +
+          (trade.closedAt ? Number(trade.closeFee || 0) : 0),
+        0
+      );
+      const exposureGbp = openTrades.reduce(
+        (sum, trade) => sum + Number(trade.sizeGbp || 0),
+        0
+      );
+
+      return {
+        mode,
+        openTrades,
+        potGbp: Number(pot.potGbp || 0),
+        balanceGbp: Number(pot.potGbp || 0) + realisedPnlGbp,
+        exposureGbp,
+        unrealisedPnlGbp,
+        realisedPnlGbp,
+        feesPaidGbp
+      };
+    }
+
+    function tradesTable(metrics, prices) {
+      if (!metrics.openTrades.length) {
+        return '<div class="empty">No open paper positions in this portfolio.</div>';
+      }
+
+      const rows = metrics.openTrades.map((trade) => {
+        const price = prices.get(trade.symbol);
+        const pnl = liveProjection(trade, price);
+
+        return `
+          <tr>
+            <td>${escapeHtml(String(trade.symbol).toUpperCase())}</td>
+            <td>${escapeHtml(String(trade.side).toUpperCase())}</td>
+            <td>${money(trade.sizeGbp)}</td>
+            <td>${Number(trade.entryPrice || 0)}</td>
+            <td>${Number(price || 0)}</td>
+            <td class="${displayClass(pnl)}">${signedMoney(pnl)}</td>
+            <td class="reason">${escapeHtml(trade.entryReason || "-")}</td>
+          </tr>
+        `;
+      }).join("");
+
+      return `
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Market</th>
+                <th>Side</th>
+                <th>Size</th>
+                <th>Entry</th>
+                <th>Now</th>
+                <th>Net live P&amp;L</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderPortfolio(elementId, metrics, data, prices) {
+      const isScalp = metrics.mode === "scalp";
+      const basketEnabled = Boolean(data.paperExecution?.scalpWinnerBasketExitEnabled);
+      const basketTarget = Number(data.paperExecution?.scalpWinnerBasketTargetGbp || 25);
+
+      const specialCards = isScalp
+        ? [
+            card(
+              "Winner basket exit",
+              basketEnabled ? "ACTIVE" : "OFF",
+              basketEnabled ? "up small-value" : "warn small-value"
+            ),
+            card("Winner basket target", money(basketTarget), "small-value")
+          ].join("")
+        : "";
+
+      document.querySelector(`#${elementId}`).innerHTML = `
+        <h2>${isScalp ? "Scalp portfolio" : "Strategy portfolio"}</h2>
+        <p class="sub">
+          ${isScalp
+            ? "Same qualified opportunities, with profitable winners harvested together after all fees."
+            : "Individual trade management using the existing strategy exit rules."}
+        </p>
+        <div class="grid">
+          ${card("Mode balance", money(metrics.balanceGbp))}
+          ${card("Open positions", metrics.openTrades.length)}
+          ${card("Pot allocation", money(metrics.potGbp))}
+          ${card("Open exposure", money(metrics.exposureGbp))}
+          ${card("Unrealised P&L", signedMoney(metrics.unrealisedPnlGbp), displayClass(metrics.unrealisedPnlGbp))}
+          ${card("Realised P&L", signedMoney(metrics.realisedPnlGbp), displayClass(metrics.realisedPnlGbp))}
+          ${card("Fees paid", money(metrics.feesPaidGbp))}
+          ${specialCards}
+        </div>
+        ${tradesTable(metrics, prices)}
+      `;
+    }
+
+    async function loadDashboard() {
+      const error = document.querySelector("#error");
+
+      try {
+        const response = await fetch("/api/state", { cache: "no-store" });
+        if (!response.ok) throw new Error(`State request failed: ${response.status}`);
+
+        const data = await response.json();
+        const prices = new Map(
+          (data.markets || []).map((market) => [market.symbol, market.price])
+        );
+        const strategy = modeMetrics(data, "strategy");
+        const scalp = modeMetrics(data, "scalp");
+
+        document.querySelector("#overview").innerHTML = [
+          card("Mode", `${escapeHtml(data.mode || "unknown")} / ${data.liveTradingLocked ? "LOCKED" : "UNSAFE"}`, data.liveTradingLocked ? "up small-value" : "down small-value"),
+          card("Markets watched", Number(data.markets || []).length),
+          card("Total open positions", Number(data.openTrades || []).length),
+          card("Total exposure", money((data.openTrades || []).reduce((sum, trade) => sum + Number(trade.sizeGbp || 0), 0))),
+          card("Paper cash", money(data.portfolio?.cashGbp)),
+          card("Total fees paid", money(data.portfolio?.feesPaidGbp))
+        ].join("");
+
+        renderPortfolio("strategy", strategy, data, prices);
+        renderPortfolio("scalp", scalp, data, prices);
+        error.style.display = "none";
+      } catch (failure) {
+        error.textContent = `Dashboard update failed: ${failure.message}`;
+        error.style.display = "block";
+      }
+    }
+
+    loadDashboard();
+    setInterval(loadDashboard, 5000);
+  </script>
+</body>
+</html>
