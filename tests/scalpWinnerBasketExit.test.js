@@ -1,7 +1,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
-  selectScalpWinnerBasketExit
+  selectScalpWinnerBasketExit,
+  selectScalpSingleWinnerExits
 } = require("../src/execution/scalpWinnerBasketExit");
 
 const trades = [
@@ -74,4 +75,17 @@ test("scalp winner basket does not exit below its net target", () => {
 
   assert.equal(result.targetReached, false);
   assert.equal(result.winners.length, 2);
+});
+
+test("scalp individual winner exits at its net £10 target", () => {
+  const result = selectScalpSingleWinnerExits({
+    trades,
+    targetGbp: 10,
+    priceForSymbol: (symbol) => prices[symbol]
+  });
+
+  assert.deepEqual(
+    result.winners.map((winner) => winner.trade.id),
+    ["scalp-winner-one"]
+  );
 });
