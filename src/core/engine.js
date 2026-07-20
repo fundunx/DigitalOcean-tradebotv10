@@ -3,6 +3,7 @@ const { Scanner } = require("../strategy/scanner");
 const { DecisionEngine } = require("../strategy/decisionEngine");
 const { RiskEngine } = require("../risk/riskEngine");
 const { PaperBroker } = require("../execution/paperBroker");
+const { selectScalpWinnerBasketExit } = require("../execution/scalpWinnerBasketExit");
 const { WhatIf } = require("../learning/whatIf");
 const { LearningAdvisor } = require("../learning/learningAdvisor");
 const { EventStore } = require("../storage/eventStore");
@@ -124,6 +125,45 @@ class Engine {
     };
   }
 
+
+  closeScalpWinnerBasket({ reasonPrefix = "paper execution" } = {}) {
+    const execution = this.config.paperExecution;
+
+    if (!execution.scalpWinnerBasketExitEnabled) return [];
+
+    const selection = selectScalpWinnerBasketExit({
+      trades: this.broker.openTrades,
+      targetGbp: execution.scalpWinnerBasketTargetGbp,
+      feeRate: this.config.trade.feeBps / 10000,
+      priceForSymbol: (symbol) => this.cache.markets.get(symbol)?.price
+    });
+
+    if (!selection.targetReached) return [];
+
+    const exitReason =
+      `${reasonPrefix}: scalp winner basket net £${selection.projectedNetPnlGbp.toFixed(2)} ` +
+      `after fees reached £${selection.targetGbp.toFixed(2)} target`;
+
+    const closed = [];
+
+    for (const winner of selection.winners) {
+      const market = this.cache.markets.get(winner.trade.symbol);
+      if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
+
+      const closedTrade = this.broker.close(
+        winner.trade.id,
+        market.price,
+        exitReason
+      );
+
+      if (closedTrade) {
+        closed.push(closedTrade);
+        this.events.append("paper.trade.closed", closedTrade);
+      }
+    }
+
+    return closed;
+  }
 
   closeManagedPaperTrades({ now = Date.now(), reasonPrefix = "paper execution" } = {}) {
     const closed = [];
@@ -278,7 +318,9 @@ class Engine {
       };
     }
 
-    const closed = this.closeManagedPaperTrades({ reasonPrefix: source });
+    const basketClosed = this.closeScalpWinnerBasket({ reasonPrefix: source });
+    const individuallyClosed = this.closeManagedPaperTrades({ reasonPrefix: source });
+    const closed = [...basketClosed, ...individuallyClosed];
     const closedSymbols = new Set(closed.map((trade) => trade.symbol));
 
     const reviews = this.reviewDecisions({
@@ -310,8 +352,10 @@ class Engine {
       const market = this.cache.markets.get(review.symbol);
       if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
 
-      const tradeMode = this.classifyPaperTradeMode(review);
-      const requestedSizeGbp = Number(review.decision.sizeGbp || this.config.paperExecution.fixedTradeSizeGbp || this.config.trade.defaultSizeGbp);
+      const tradeModes = ["strategy", "scalp"];
+
+      for (const tradeMode of tradeModes) {
+        const requestedSizeGbp = Number(review.decision.sizeGbp || this.config.paperExecution.fixedTradeSizeGbp || this.config.trade.defaultSizeGbp);
       const potCheck = this.canOpenPaperTradeInMode(tradeMode, requestedSizeGbp);
 
       if (!potCheck.approved) {
@@ -338,7 +382,8 @@ class Engine {
 
       const trade = this.broker.open(executionDecision, market.price);
       opened.push(trade);
-      this.events.append("paper.trade.opened", trade);
+        this.events.append("paper.trade.opened", trade);
+      }
     }
 
     return {
@@ -357,6 +402,12 @@ class Engine {
       startedAt: this.startedAt,
       markets: this.cache.snapshot(),
       portfolio: this.broker.metrics(),
+      paperExecution: {
+        scalpWinnerBasketExitEnabled:
+          this.config.paperExecution.scalpWinnerBasketExitEnabled,
+        scalpWinnerBasketTargetGbp:
+          this.config.paperExecution.scalpWinnerBasketTargetGbp
+      },
       paperPots: this.paperPotSummary(),
       openTrades: this.broker.openTrades,
       closedTrades: this.broker.closedTrades,
