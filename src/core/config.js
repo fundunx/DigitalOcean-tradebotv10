@@ -29,7 +29,7 @@ function loadConfig(env = process.env) {
     trade: {
       defaultSizeGbp: numberEnv("TRADE_SIZE_GBP", 2000, env),
       minSizeGbp: numberEnv("MIN_TRADE_SIZE_GBP", 250, env),
-      feeBps: numberEnv("FEE_BPS", 4, env),
+      feeBps: numberEnv("FEE_BPS", 5, env),
       slippageBps: numberEnv("SLIPPAGE_BPS", 4, env),
       maxOpenTradesPerPot: numberEnv("MAX_OPEN_TRADES_PER_POT", 5, env)
     },

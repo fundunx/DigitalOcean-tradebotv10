@@ -1,5 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const {
+  calculateTradePnl,
+  estimateRoundTripFees
+} = require("../portfolio/portfolioPnl");
 
 function appendPaperTradeLedger(type, trade) {
   const dataDir = process.env.DATA_DIR || "data";
@@ -32,6 +36,7 @@ function loadPaperBrokerState() {
 function persistPaperBrokerState(broker) {
   const file = paperBrokerStateFile();
   if (!file) return;
+
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, JSON.stringify({
     cashGbp: broker.cashGbp,
@@ -41,10 +46,39 @@ function persistPaperBrokerState(broker) {
   }, null, 2));
 }
 
+function finiteNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function entryFeeForTrade(trade, fallbackFeeBps) {
+  const storedEntryFee = finiteNumber(trade.entryFeeGbp);
+  if (storedEntryFee !== null) return storedEntryFee;
+
+  const legacyFee = finiteNumber(trade.fee);
+  if (legacyFee !== null) return legacyFee;
+
+  return estimateRoundTripFees({
+    sizeGbp: trade.sizeGbp,
+    feeBps: fallbackFeeBps
+  }).entryFeeGbp;
+}
+
+function netPnlForClosedTrade(trade) {
+  const reportedPnl = Number(trade.pnlGbp || 0);
+
+  if (trade.pnlIncludesEntryFee === true) {
+    return reportedPnl;
+  }
+
+  return reportedPnl - entryFeeForTrade(trade, 4);
+}
+
 class PaperBroker {
-  constructor({ startingBalanceGbp = 20000 } = {}) {
+  constructor({ startingBalanceGbp = 20000, feeBps = 4 } = {}) {
     const recovered = loadPaperBrokerState();
 
+    this.feeBps = Number.isFinite(Number(feeBps)) ? Number(feeBps) : 4;
     this.cashGbp = Number(
       recovered?.cashGbp ?? recovered?.portfolio?.cashGbp ?? startingBalanceGbp
     );
@@ -56,7 +90,9 @@ class PaperBroker {
   }
 
   open(decision, price) {
-    if (!Number.isFinite(price) || price <= 0) throw new Error("valid live entry price required");
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new Error("valid live entry price required");
+    }
     if (!decision.symbol) throw new Error("paper trade requires symbol");
     if (!decision.side) throw new Error("paper trade requires side");
     if (!Number.isFinite(decision.stopLossPct) || decision.stopLossPct <= 0) {
@@ -66,7 +102,11 @@ class PaperBroker {
       throw new Error("paper trade requires positive targetPct");
     }
 
-    const fee = decision.sizeGbp * 0.0004;
+    const fees = estimateRoundTripFees({
+      sizeGbp: decision.sizeGbp,
+      feeBps: this.feeBps
+    });
+
     const trade = {
       id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
       symbol: decision.symbol,
@@ -81,11 +121,15 @@ class PaperBroker {
       targetPct: decision.targetPct,
       confidence: decision.confidence,
       expectedValue: decision.expectedValue,
-      fee
+      fee: fees.entryFeeGbp,
+      entryFeeGbp: fees.entryFeeGbp,
+      feeBps: this.feeBps
     };
-    this.cashGbp -= fee;
-    this.feesPaidGbp += fee;
+
+    this.cashGbp -= fees.entryFeeGbp;
+    this.feesPaidGbp += fees.entryFeeGbp;
     this.openTrades.push(trade);
+
     persistPaperBrokerState(this);
     appendPaperTradeLedger("paper.trade.opened", trade);
     return trade;
@@ -94,36 +138,68 @@ class PaperBroker {
   close(id, price, exitReason = "paper close") {
     const index = this.openTrades.findIndex((trade) => trade.id === id);
     if (index === -1) return null;
+
     const [trade] = this.openTrades.splice(index, 1);
-    const direction = trade.side === "short" ? -1 : 1;
-    const pnl = trade.sizeGbp * ((price - trade.entryPrice) / trade.entryPrice) * direction;
-    const closeFee = trade.sizeGbp * 0.0004;
-    const netPnl = pnl - closeFee;
+    const feeBps = finiteNumber(trade.feeBps) ?? this.feeBps;
+    const entryFeeGbp = entryFeeForTrade(trade, feeBps);
+    const exitFeeGbp = estimateRoundTripFees({
+      sizeGbp: trade.sizeGbp,
+      feeBps
+    }).exitFeeGbp;
+
+    const pnl = calculateTradePnl({
+      side: trade.side,
+      sizeGbp: trade.sizeGbp,
+      entryPrice: trade.entryPrice,
+      exitPrice: price,
+      entryFeeGbp,
+      exitFeeGbp
+    });
+
     const closed = {
       ...trade,
+      fee: entryFeeGbp,
+      entryFeeGbp,
       exitPrice: price,
       exitReason,
-      pnlGbp: netPnl,
-      grossPnlGbp: pnl,
-      closeFee,
+      grossPnlGbp: pnl.grossPnlGbp,
+      exitFeeGbp,
+      closeFee: exitFeeGbp,
+      totalCostsGbp: pnl.totalCostsGbp,
+      pnlGbp: pnl.netPnlGbp,
+      pnlIncludesEntryFee: true,
+      cashChangeGbp: pnl.grossPnlGbp - exitFeeGbp,
       closedAt: new Date().toISOString()
     };
+
     this.closedTrades.push(closed);
-    appendPaperTradeLedger("paper.trade.closed", closed);
-    this.cashGbp += netPnl;
-    this.feesPaidGbp += closeFee;
+
+    /*
+     * Entry fee was deducted at open. Add only gross P&L minus exit fee here
+     * so cash does not deduct the entry fee a second time.
+     */
+    this.cashGbp += closed.cashChangeGbp;
+    this.feesPaidGbp += exitFeeGbp;
+
     persistPaperBrokerState(this);
+    appendPaperTradeLedger("paper.trade.closed", closed);
     return closed;
   }
 
   metrics() {
-    const wins = this.closedTrades.filter((trade) => trade.pnlGbp > 0).length;
+    const wins = this.closedTrades.filter(
+      (trade) => netPnlForClosedTrade(trade) > 0
+    ).length;
+
     return {
       cashGbp: this.cashGbp,
       openTrades: this.openTrades.length,
       closedTrades: this.closedTrades.length,
       feesPaidGbp: this.feesPaidGbp,
-      realizedPnlGbp: this.closedTrades.reduce((sum, trade) => sum + trade.pnlGbp, 0),
+      realizedPnlGbp: this.closedTrades.reduce(
+        (sum, trade) => sum + netPnlForClosedTrade(trade),
+        0
+      ),
       winRate: this.closedTrades.length ? wins / this.closedTrades.length : 0
     };
   }

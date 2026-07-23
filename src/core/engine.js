@@ -19,7 +19,7 @@ class Engine {
     this.scanner = new Scanner({ cache: this.cache, config });
     this.decisions = new DecisionEngine({ config });
     this.risk = new RiskEngine({ config });
-    this.broker = new PaperBroker({ startingBalanceGbp: config.startingBalanceGbp });
+    this.broker = new PaperBroker({ startingBalanceGbp: config.startingBalanceGbp, feeBps: config.trade.feeBps });
     this.whatIf = new WhatIf();
     this.advisor = new LearningAdvisor();
     this.events = new EventStore();
