@@ -48,7 +48,11 @@ function loadConfig(env = process.env) {
       minSignals: numberEnv("PAPER_MIN_SIGNALS", paperTestMode ? 1 : 3, env),
       shortsEnabled: boolEnv("PAPER_SHORTS_ENABLED", false, env),
       fixedTradeSizeGbp: numberEnv("PAPER_FIXED_TRADE_SIZE_GBP", 2000, env),
-    maxNewTradesPerCycle: numberEnv("PAPER_MAX_NEW_TRADES_PER_CYCLE", 1, env),
+    maxNewComparisonSetsPerCycle: numberEnv(
+      "PAPER_MAX_NEW_COMPARISON_SETS_PER_CYCLE",
+      numberEnv("PAPER_MAX_NEW_TRADES_PER_CYCLE", 1, env),
+      env
+    ),
       maxScalpTrades: numberEnv("PAPER_MAX_SCALP_TRADES", 5, env),
       maxStrategyTrades: numberEnv("PAPER_MAX_STRATEGY_TRADES", 5, env),
       scalpPotGbp: numberEnv("PAPER_SCALP_POT_GBP", 10000, env),

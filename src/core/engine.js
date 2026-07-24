@@ -318,6 +318,49 @@ class Engine {
     };
   }
 
+  canOpenPaperComparisonPair(sizeGbp) {
+    const size = Number(sizeGbp);
+
+    if (!Number.isFinite(size) || size <= 0) {
+      return {
+        approved: false,
+        reason: "invalid paper comparison position size"
+      };
+    }
+
+    const totalExposure = this.broker.openTrades.reduce(
+      (sum, trade) => sum + Number(trade.sizeGbp || 0),
+      0
+    );
+    const totalAvailable = this.config.paperExecution.totalPotGbp - totalExposure;
+    const pairSizeGbp = size * 2;
+
+    if (pairSizeGbp > totalAvailable) {
+      return {
+        approved: false,
+        reason: `paper comparison needs £${pairSizeGbp.toFixed(2)} but only £${totalAvailable.toFixed(2)} is available`
+      };
+    }
+
+    for (const mode of ["strategy", "scalp"]) {
+      const check = this.canOpenPaperTradeInMode(mode, size);
+
+      if (!check.approved) {
+        return {
+          approved: false,
+          reason: check.reason,
+          failedMode: mode
+        };
+      }
+    }
+
+    return {
+      approved: true,
+      totalAvailable,
+      pairSizeGbp
+    };
+  }
+
   paperPotSummary() {
     return ["scalp", "strategy"].map((mode) => {
       const limits = this.paperPotLimits(mode);
@@ -369,10 +412,14 @@ class Engine {
     });
 
     const opened = [];
-    const maxNewTrades = Math.max(
+    const maxNewComparisonSets = Math.max(
       1,
-      Math.floor(Number(this.config.paperExecution.maxNewTradesPerCycle || 1))
+      Math.floor(Number(
+        this.config.paperExecution.maxNewComparisonSetsPerCycle || 1
+      ))
     );
+    let openedComparisonSets = 0;
+
     const rankedReviews = [...reviews].sort((left, right) => {
       const leftConfidence = Number(left.decision?.confidence || 0);
       const rightConfidence = Number(right.decision?.confidence || 0);
@@ -384,58 +431,82 @@ class Engine {
     });
 
     for (const review of rankedReviews) {
-      if (opened.length >= maxNewTrades) break;
+      if (openedComparisonSets >= maxNewComparisonSets) break;
       if (!review.decision?.approved) continue;
       if (closedSymbols.has(review.symbol)) continue;
 
       const market = this.cache.markets.get(review.symbol);
       if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
 
-      const tradeMode = this.classifyPaperTradeMode(review);
       const requestedSizeGbp = Number(
         review.decision.sizeGbp
         || this.config.paperExecution.fixedTradeSizeGbp
         || this.config.trade.defaultSizeGbp
       );
-      const potCheck = this.canOpenPaperTradeInMode(tradeMode, requestedSizeGbp);
+      const pairCheck = this.canOpenPaperComparisonPair(requestedSizeGbp);
 
-      if (!potCheck.approved) {
+      if (!pairCheck.approved) {
         this.events.append("paper.trade.rejected", {
           symbol: review.symbol,
-          tradeMode,
+          tradeMode: "comparison",
           sizeGbp: requestedSizeGbp,
-          reason: potCheck.reason
+          reason: pairCheck.reason
         });
         continue;
       }
 
-      const executionDecision = {
-        ...review.decision,
-        symbol: review.decision.symbol || review.symbol,
-        side: review.decision.side || review.side || "long",
-        analysis: review.decision.analysis || review.scanner?.analysis,
-        sizeGbp: requestedSizeGbp,
-        potName: tradeMode,
-        tradeMode,
-        stopLossPct: Number.isFinite(review.decision.stopLossPct) ? review.decision.stopLossPct : 0.8,
-        targetPct: Number.isFinite(review.decision.targetPct) ? review.decision.targetPct : 1.2,
-        entryReason: `[${tradeMode}] ${review.decision.entryReason || review.scanner?.reason || "paper execution approved setup"}`
-      };
-      const riskCheck = this.risk.check(executionDecision, this.broker.openTrades);
+      const plannedTrades = [];
 
-      if (!riskCheck.approved) {
-        this.events.append("paper.trade.rejected", {
-          symbol: review.symbol,
-          tradeMode,
+      for (const tradeMode of ["strategy", "scalp"]) {
+        const executionDecision = {
+          ...review.decision,
+          symbol: review.decision.symbol || review.symbol,
+          side: review.decision.side || review.side || "long",
+          analysis: review.decision.analysis || review.scanner?.analysis,
           sizeGbp: requestedSizeGbp,
-          reason: riskCheck.reason
-        });
-        continue;
+          potName: tradeMode,
+          tradeMode,
+          stopLossPct: Number.isFinite(review.decision.stopLossPct)
+            ? review.decision.stopLossPct
+            : 0.8,
+          targetPct: Number.isFinite(review.decision.targetPct)
+            ? review.decision.targetPct
+            : 1.2,
+          entryReason: `[${tradeMode}] ${
+            review.decision.entryReason
+            || review.scanner?.reason
+            || "paper execution approved setup"
+          }`
+        };
+
+        const riskCheck = this.risk.check(
+          executionDecision,
+          this.paperOpenTradesForMode(tradeMode)
+        );
+
+        if (!riskCheck.approved) {
+          this.events.append("paper.trade.rejected", {
+            symbol: review.symbol,
+            tradeMode: "comparison",
+            sizeGbp: requestedSizeGbp,
+            reason: `${tradeMode} risk admission failed: ${riskCheck.reason}`
+          });
+          plannedTrades.length = 0;
+          break;
+        }
+
+        plannedTrades.push(executionDecision);
       }
 
-      const trade = this.broker.open(executionDecision, market.price);
-      opened.push(trade);
-      this.events.append("paper.trade.opened", trade);
+      if (plannedTrades.length !== 2) continue;
+
+      for (const executionDecision of plannedTrades) {
+        const trade = this.broker.open(executionDecision, market.price);
+        opened.push(trade);
+        this.events.append("paper.trade.opened", trade);
+      }
+
+      openedComparisonSets += 1;
     }
 
     return {
