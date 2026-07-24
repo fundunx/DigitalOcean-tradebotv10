@@ -39,21 +39,21 @@ test("paper execution cycle can open and close paper trades only when enabled", 
 
   const first = engine.runPaperExecutionCycle({ source: "test.open" });
   assert.equal(first.enabled, true);
-  assert.equal(first.opened.length, 2);
+  assert.equal(first.opened.length, 1);
   assert.deepEqual(
-    first.opened.map((trade) => trade.tradeMode).sort(),
-    ["scalp", "strategy"]
+    first.opened.map((trade) => trade.tradeMode),
+    ["strategy"]
   );
-  assert.equal(engine.broker.openTrades.length, 2);
+  assert.equal(engine.broker.openTrades.length, 1);
 
   for (const trade of engine.broker.openTrades) {
     trade.openedAt = new Date(Date.now() - 5000).toISOString();
   }
 
   const second = engine.runPaperExecutionCycle({ source: "test.close" });
-  assert.equal(second.closed.length, 2);
+  assert.equal(second.closed.length, 1);
   assert.equal(engine.broker.openTrades.length, 0);
-  assert.equal(engine.broker.closedTrades.length, 2);
+  assert.equal(engine.broker.closedTrades.length, 1);
 });
 
 test("paper execution cycle stays disabled by default", () => {

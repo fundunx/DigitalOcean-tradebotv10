@@ -369,6 +369,10 @@ class Engine {
     });
 
     const opened = [];
+    const maxNewTrades = Math.max(
+      1,
+      Math.floor(Number(this.config.paperExecution.maxNewTradesPerCycle || 1))
+    );
     const rankedReviews = [...reviews].sort((left, right) => {
       const leftConfidence = Number(left.decision?.confidence || 0);
       const rightConfidence = Number(right.decision?.confidence || 0);
@@ -380,16 +384,19 @@ class Engine {
     });
 
     for (const review of rankedReviews) {
-      if (!review.risk.approved) continue;
+      if (opened.length >= maxNewTrades) break;
+      if (!review.decision?.approved) continue;
       if (closedSymbols.has(review.symbol)) continue;
 
       const market = this.cache.markets.get(review.symbol);
       if (!market || !Number.isFinite(market.price) || market.price <= 0) continue;
 
-      const tradeModes = ["strategy", "scalp"];
-
-      for (const tradeMode of tradeModes) {
-        const requestedSizeGbp = Number(review.decision.sizeGbp || this.config.paperExecution.fixedTradeSizeGbp || this.config.trade.defaultSizeGbp);
+      const tradeMode = this.classifyPaperTradeMode(review);
+      const requestedSizeGbp = Number(
+        review.decision.sizeGbp
+        || this.config.paperExecution.fixedTradeSizeGbp
+        || this.config.trade.defaultSizeGbp
+      );
       const potCheck = this.canOpenPaperTradeInMode(tradeMode, requestedSizeGbp);
 
       if (!potCheck.approved) {
@@ -406,6 +413,7 @@ class Engine {
         ...review.decision,
         symbol: review.decision.symbol || review.symbol,
         side: review.decision.side || review.side || "long",
+        analysis: review.decision.analysis || review.scanner?.analysis,
         sizeGbp: requestedSizeGbp,
         potName: tradeMode,
         tradeMode,
@@ -413,11 +421,21 @@ class Engine {
         targetPct: Number.isFinite(review.decision.targetPct) ? review.decision.targetPct : 1.2,
         entryReason: `[${tradeMode}] ${review.decision.entryReason || review.scanner?.reason || "paper execution approved setup"}`
       };
+      const riskCheck = this.risk.check(executionDecision, this.broker.openTrades);
+
+      if (!riskCheck.approved) {
+        this.events.append("paper.trade.rejected", {
+          symbol: review.symbol,
+          tradeMode,
+          sizeGbp: requestedSizeGbp,
+          reason: riskCheck.reason
+        });
+        continue;
+      }
 
       const trade = this.broker.open(executionDecision, market.price);
       opened.push(trade);
-        this.events.append("paper.trade.opened", trade);
-      }
+      this.events.append("paper.trade.opened", trade);
     }
 
     return {
