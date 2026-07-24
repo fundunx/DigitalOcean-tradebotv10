@@ -36,7 +36,6 @@ function analyseMarket(market) {
     : null;
 
   const blockers = [];
-  const signals = [];
 
   if (market.realMarketData !== true) blockers.push("market data is not marked as real");
   if (!Number.isFinite(market.price) || market.price <= 0) blockers.push("missing valid live price");
@@ -45,23 +44,78 @@ function analyseMarket(market) {
   if (spreadPct === null) blockers.push("missing spread");
   if (spreadPct !== null && spreadPct > 0.08) blockers.push(`spread too wide (${spreadPct.toFixed(4)}%)`);
 
-  if (trend15mPct > 0.12) signals.push("15m trend positive");
-  if (trend30mPct > 0.18) signals.push("30m trend positive");
-  if (momentum5mPct > 0.05) signals.push("5m momentum positive");
-  if (relativeVolume > 1.15) signals.push("recent volume above baseline");
-  if (momentum1mPct < -0.18) blockers.push("latest candle shows sharp downside momentum");
+  const bullishSignals = [];
+  const bearishSignals = [];
 
-  let score = 0;
-  if (market.realMarketData === true) score += 20;
-  if (candles.length >= 60) score += 15;
-  if (spreadPct !== null && spreadPct <= 0.03) score += 15;
-  if (trend15mPct > 0.12) score += 15;
-  if (trend30mPct > 0.18) score += 10;
-  if (momentum5mPct > 0.05) score += 10;
-  if (relativeVolume > 1.15) score += 10;
-  if (trend60mPct > 0.25) score += 5;
+  if (trend15mPct > 0.12) bullishSignals.push("15m trend positive");
+  if (trend30mPct > 0.18) bullishSignals.push("30m trend positive");
+  if (momentum5mPct > 0.05) bullishSignals.push("5m momentum positive");
+  if (relativeVolume > 1.15) bullishSignals.push("recent volume above baseline");
 
-  score = Math.max(0, Math.min(100, Math.round(score)));
+  if (trend15mPct < -0.12) bearishSignals.push("15m trend negative");
+  if (trend30mPct < -0.18) bearishSignals.push("30m trend negative");
+  if (momentum5mPct < -0.05) bearishSignals.push("5m momentum negative");
+  if (relativeVolume > 1.15) bearishSignals.push("recent volume above baseline");
+
+  const sharedScore = (
+    (market.realMarketData === true ? 20 : 0)
+    + (candles.length >= 60 ? 15 : 0)
+    + (spreadPct !== null && spreadPct <= 0.03 ? 15 : 0)
+  );
+
+  const bullishScore = sharedScore
+    + (trend15mPct > 0.12 ? 15 : 0)
+    + (trend30mPct > 0.18 ? 10 : 0)
+    + (momentum5mPct > 0.05 ? 10 : 0)
+    + (relativeVolume > 1.15 ? 10 : 0)
+    + (trend60mPct > 0.25 ? 5 : 0);
+
+  const bearishScore = sharedScore
+    + (trend15mPct < -0.12 ? 15 : 0)
+    + (trend30mPct < -0.18 ? 10 : 0)
+    + (momentum5mPct < -0.05 ? 10 : 0)
+    + (relativeVolume > 1.15 ? 10 : 0)
+    + (trend60mPct < -0.25 ? 5 : 0);
+
+  const bullishConfirmed = (
+    trend15mPct > 0.12
+    && trend30mPct > 0.18
+    && momentum5mPct > 0.05
+    && relativeVolume > 1.15
+  );
+
+  const bearishConfirmed = (
+    trend15mPct < -0.12
+    && trend30mPct < -0.18
+    && momentum5mPct < -0.05
+    && relativeVolume > 1.15
+  );
+
+  let regime = "neutral";
+  let signals = [];
+  let score = sharedScore;
+
+  if (bullishConfirmed && !bearishConfirmed) {
+    regime = "bullish";
+    signals = bullishSignals;
+
+    if (momentum1mPct < -0.18) {
+      blockers.push("latest candle shows sharp downside momentum");
+    }
+
+    score = bullishScore;
+  } else if (bearishConfirmed && !bullishConfirmed) {
+    regime = "bearish";
+    signals = bearishSignals;
+
+    if (momentum1mPct > 0.18) {
+      blockers.push("latest candle shows sharp upside momentum");
+    }
+
+    score = bearishScore;
+  } else {
+    blockers.push("no aligned bullish or bearish market regime");
+  }
 
   return {
     symbol: market.symbol,
@@ -75,7 +129,8 @@ function analyseMarket(market) {
     trend30mPct,
     trend60mPct,
     relativeVolume,
-    score,
+    regime,
+    score: Math.max(0, Math.min(100, Math.round(score))),
     signals,
     blockers
   };
